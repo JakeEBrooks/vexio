@@ -1,0 +1,24 @@
+[package]
+name = "vexio"
+version = "0.1.0"
+authors = ["Jacob Brooks <jacobbrooks312@gmail.com>"]
+description = "The friendliest VLBI Experiment (VEX) file support library"
+homepage = "https://github.com/JakeEBrooks/vexio"
+repository = "https://github.com/JakeEBrooks/vexio"
+keywords = ["parser", "parsing", "text", "file", "io", "science"]
+edition = "2024"
+
+[dependencies]
+thiserror = "2"
+miette = "7"
+serde = { version = "1", features = ["derive"], optional = true }
+
+[features]
+default = ["serde"]
+serde = ["dep:serde"]
+
+[dev-dependencies]
+# For nice test error messages
+miette = { version = "7", features = ["fancy"] }
+
+serde_json = "1"
