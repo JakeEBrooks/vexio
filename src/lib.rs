@@ -20,7 +20,7 @@ pub use global::Global;
 pub use param::{Param, ParamValue, ParamValueKind};
 pub use reference::VexRef;
 pub use schedule::{Scan, Schedule};
-pub use vex::{ToFromVex, Vex, VexVersion};
+pub use vex::{Vex, VexVersion};
 
 /// Valid high level Vex blocks
 pub const HIGH_LEVEL_BLOCKS: [&str; 3] = ["GLOBAL", "STATION", "MODE"];

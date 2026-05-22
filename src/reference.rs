@@ -1,15 +1,18 @@
-use crate::vex::ToFromVex;
+use std::slice::{Iter, IterMut};
+
+use crate::error::ParseError;
+use crate::parsing::Parser;
 
 /// A Vex `ref` declaration
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize), derive(serde::Deserialize))]
 pub struct VexRef {
     /// The name of the [`Block`](crate::Block) this [`VexRef`] refers to
-    pub blockname: String,
+    blockname: String,
     /// The name of the [`Def`](crate::Def) block this [`VexRef`] refers to
-    pub keyword: String,
+    keyword: String,
     /// The associated qualifiers of this [`VexRef`]
-    pub qualifiers: Vec<String>,
+    qualifiers: Vec<String>,
 }
 
 impl VexRef {
@@ -40,10 +43,36 @@ impl VexRef {
             qualifiers: qualifiers.into().iter().map(|s| s.as_ref().to_string()).collect(),
         }
     }
-}
 
-impl ToFromVex for VexRef {
-    fn to_vex(&self) -> String {
+    pub fn blockname(&self) -> &str {
+        &self.blockname
+    }
+
+    pub fn defname(&self) -> &str {
+        &self.keyword
+    }
+
+    pub fn quals(&self) -> Iter<'_, String> {
+        self.qualifiers.iter()
+    }
+
+    pub fn quals_mut(&mut self) -> IterMut<'_, String> {
+        self.qualifiers.iter_mut()
+    }
+
+    pub fn quals_slice(&self) -> &[String] {
+        self.qualifiers.as_slice()
+    }
+
+    pub fn quals_mut_slice(&mut self) -> &mut [String] {
+        self.qualifiers.as_mut_slice()
+    }
+
+    pub fn add_quals(&mut self, qual: impl AsRef<str>) {
+        self.qualifiers.push(qual.as_ref().to_string());
+    }
+
+    pub fn to_vex(&self) -> String {
         if self.qualifiers.is_empty() {
             format!("ref ${} = {};", self.blockname, self.keyword)
         } else {
@@ -56,7 +85,7 @@ impl ToFromVex for VexRef {
         }
     }
 
-    fn to_vex_minified(&self) -> String {
+    pub fn to_vex_minified(&self) -> String {
         if self.qualifiers.is_empty() {
             format!("ref ${}={};", self.blockname, self.keyword)
         } else {
@@ -69,8 +98,8 @@ impl ToFromVex for VexRef {
         }
     }
 
-    fn from_vex(vex: &str) -> Result<Self, crate::VexError> {
-        crate::parsing::Parser::new(vex).parse_ref()
+    pub fn parse(vex: &str) -> Result<Self, ParseError> {
+        Parser::new(vex).parse_ref()
     }
 }
 

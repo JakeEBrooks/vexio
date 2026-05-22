@@ -1,6 +1,6 @@
 //! This example shows how to construct a simple [`Vex`] file manually, using some of the examples from the Vex specification
 
-use vexio::{Block, Global, HighLevelDef, Schedule, ToFromVex, Vex, def, refr, scan};
+use vexio::{Block, Global, HighLevelDef, Schedule, Vex, def, refr, scan};
 
 fn main() -> miette::Result<()> {
     let global: Global = Global::from(vec![
@@ -92,8 +92,8 @@ fn main() -> miette::Result<()> {
         .with_schedule(sched)
         .to_vex();
 
-    print!("{}", &vex);
+    print!("{}", vex);
 
-    let _parsed_vex = Vex::from_vex(&vex)?;
+    let _parsed_vex = Vex::parse(&vex)?;
     Ok(())
 }

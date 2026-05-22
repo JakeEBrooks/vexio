@@ -1,19 +1,47 @@
-use crate::{ToFromVex, VexError, VexRef};
+use crate::VexRef;
+use crate::error::ParseError;
+use crate::parsing::Parser;
 
 /// Represents the unique `GLOBAL` block within a Vex file.
-pub type Global = Vec<VexRef>;
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize), derive(serde::Deserialize))]
+pub struct Global {
+    refs: Vec<VexRef>,
+}
 
-impl ToFromVex for Global {
-    fn to_vex(&self) -> String {
-        format!("$GLOBAL;\n{}\n", self.iter().map(|r| format!("\t{}", r.to_vex())).collect::<Vec<String>>().join("\n"))
+impl Global {
+    pub fn new() -> Self {
+        Self { refs: Vec::new() }
     }
 
-    fn to_vex_minified(&self) -> String {
-        format!("$GLOBAL;{}", self.iter().map(|r| r.to_vex_minified()).collect::<Vec<String>>().join(""))
+    pub fn add_ref(&mut self, refr: VexRef) {
+        self.refs.push(refr);
     }
 
-    fn from_vex(vex: &str) -> Result<Self, VexError> {
-        crate::parsing::Parser::new(vex).parse_global()
+    pub fn as_slice(&self) -> &[VexRef] {
+        self.refs.as_slice()
+    }
+
+    pub fn as_mut_slice(&mut self) -> &mut [VexRef] {
+        self.refs.as_mut_slice()
+    }
+
+    pub fn to_vex(&self) -> String {
+        format!("$GLOBAL;\n{}\n", self.refs.iter().map(|r| format!("\t{}", r.to_vex())).collect::<Vec<String>>().join("\n"))
+    }
+
+    pub fn to_vex_minified(&self) -> String {
+        format!("$GLOBAL;{}", self.refs.iter().map(|r| r.to_vex_minified()).collect::<Vec<String>>().join(""))
+    }
+
+    pub fn parse(vex: &str) -> Result<Self, ParseError> {
+        Parser::new(vex).parse_global()
+    }
+}
+
+impl<I: Into<Vec<VexRef>>> From<I> for Global {
+    fn from(value: I) -> Self {
+        Self { refs: value.into() }
     }
 }
 
@@ -25,8 +53,8 @@ mod tests {
 
     #[test]
     fn test_parse_tofrom_global() -> miette::Result<()> {
-        let start: Global = [refr!("MY_BLOCK" = "some_key" : "qual1"), refr!("MY_BLOCK2" = "some_key2")].into();
-        assert_eq!(start, Global::from_vex(start.to_vex().as_str())?);
+        let start = Global::from([refr!("MY_BLOCK" = "some_key" : "qual1"), refr!("MY_BLOCK2" = "some_key2")]);
+        assert_eq!(start, Global::parse(start.to_vex().as_str())?);
         Ok(())
     }
 }

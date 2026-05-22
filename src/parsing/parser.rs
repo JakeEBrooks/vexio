@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
 use crate::def::HighLevelDef;
+use crate::error::ParseError;
 use crate::param::{ParamValue, ParamValueKind};
 use crate::parsing::token::{Token, TokenKind};
 use crate::parsing::tokenizer::Tokenizer;
 use crate::schedule::Scan;
 use crate::vex::VexVersion;
-use crate::{Block, Def, Global, HighLevelBlock, Param, Schedule, ToFromVex, Vex, VexError, VexRef};
+use crate::{Block, Def, Global, HighLevelBlock, Param, Schedule, Vex, VexError, VexRef};
 
 /// Parses Vex [`Token`]s into Vex data structures.
 pub struct Parser<'de> {
@@ -21,16 +22,7 @@ impl<'de> Parser<'de> {
 
     /// Parse the referenced string into [`Vex`].
     pub fn parse(mut self) -> Result<Vex, VexError> {
-        let first_token = self.expect(TokenKind::Ident)?;
-        if first_token.source != "VEX_rev" {
-            return Err(VexError::new_at("Missing VEX_rev", 0)
-                .with_help("Are you sure this is a Vex file?")
-                .with_src(self.tokenizer.whole));
-        }
-        self.expect_dismiss(TokenKind::Equals)?;
-        let rev_str = self.expect(TokenKind::Number)?.source;
-        let rev = VexVersion::from_vex(rev_str)?;
-        self.expect_dismiss(TokenKind::SemiColon)?;
+        let rev = self.parse_vex_version()?;
 
         let mut global: Option<Global> = None;
         let mut mode: Option<HighLevelBlock> = None;
@@ -45,9 +37,8 @@ impl<'de> Parser<'de> {
                 "MODE" => mode = Some(self.parse_highlevel_block()?),
                 "SCHED" => schedule = Some(self.parse_schedule()?),
                 _ => {
-                    let blkspan = block.loc_range();
-                    if let Some(_v) = primitives.insert(block.source.to_string(), self.parse_primitive_block()?) {
-                        return Err(VexError::new_span("Found duplicate block", blkspan).with_src(self.tokenizer.whole));
+                    if let Some(dup) = primitives.insert(block.source.to_string(), self.parse_primitive_block()?) {
+                        return Err(VexError::DuplicateBlock(dup.name().to_string()));
                     }
                 }
             }
@@ -55,11 +46,11 @@ impl<'de> Parser<'de> {
 
         Ok(Vex {
             rev,
-            global: global.ok_or(VexError::new("Could not find a GLOBAL block"))?,
-            station: station.ok_or(VexError::new("Could not find a STATION block"))?,
-            mode: mode.ok_or(VexError::new("Could not find a MODE block"))?,
+            global: global.ok_or(VexError::MissingBlock("GLOBAL".to_string()))?,
+            station: station.ok_or(VexError::MissingBlock("STATION".to_string()))?,
+            mode: mode.ok_or(VexError::MissingBlock("MODE".to_string()))?,
             primitives,
-            schedule: schedule.ok_or(VexError::new("Could not find a SCHED block"))?,
+            schedule: schedule.ok_or(VexError::MissingBlock("SCHED".to_string()))?,
         })
     }
 
@@ -86,26 +77,21 @@ impl<'de> Parser<'de> {
     /// Expect to find a [`Token`] of token kind `kind`, and return that token. An error is returned if `kind` does not match the found token kind.
     ///
     /// Note that this function consumes the token even in the case of an error. If this behavior is not desired, consider using [`peek`](Self::peek) or [`expect_if_kind`](Self::expect_if_kind) instead.
-    pub fn expect(&mut self, kind: TokenKind) -> Result<Token<'de>, VexError> {
+    pub fn expect(&mut self, kind: TokenKind) -> Result<Token<'de>, ParseError> {
         let curr_pos = self.tokenizer.byte;
         let next_token = self
             .tokenizer
             .next()
-            .ok_or(VexError::new_at("Unexpected end of token stream", curr_pos).with_src(self.tokenizer.whole))?;
+            .ok_or(ParseError::new_at("Unexpected end of token stream", self.tokenizer.whole, curr_pos))?;
         if next_token.kind != kind {
-            Err(VexError::new_span(format!("Expected to find a token of kind {} but found {}", kind, next_token.kind), next_token.loc_range()).with_src(self.tokenizer.whole))
+            Err(ParseError::new_range(
+                format!("Expected to find a token of kind {} but found {}", kind, next_token.kind),
+                self.tokenizer.whole,
+                next_token.loc_range(),
+            ))
         } else {
             Ok(next_token)
         }
-    }
-
-    /// Expect to find a [`Token`] of token kind `kind`, and apply the predicate `pred`. If `true`, return that token. If `false` return an error with description `err_desc`.
-    pub fn expect_and<P: FnOnce(&Token<'de>) -> bool, S: AsRef<str>>(&mut self, kind: TokenKind, pred: P, err_desc: S) -> Result<Token<'de>, VexError> {
-        let next = self.expect(kind)?;
-        if !pred(&next) {
-            return Err(VexError::new_span(err_desc, next.loc_range()).with_src(self.tokenizer.whole));
-        }
-        Ok(next)
     }
 
     /// Peek ahead at the next token and if a token of kind `kind` is found, call [`expect`](Self::expect).
@@ -114,35 +100,66 @@ impl<'de> Parser<'de> {
     }
 
     /// Like [`expect`](Self::expect), but just dismiss the token instead of returning it.
-    pub fn expect_dismiss(&mut self, kind: TokenKind) -> Result<(), VexError> {
+    pub fn expect_dismiss(&mut self, kind: TokenKind) -> Result<(), ParseError> {
         self.expect(kind).map(|_| ())
     }
 
     /// Expect to find a token in the stream, then peek at its kind.
-    pub fn expect_peek_kind(&mut self) -> Result<TokenKind, VexError> {
+    pub fn expect_peek_kind(&mut self) -> Result<TokenKind, ParseError> {
         self.peek_kind()
-            .ok_or(VexError::new_at("Unexpected end of token stream", self.tokenizer.byte).with_src(self.tokenizer.whole))
+            .ok_or(ParseError::new_at("Unexpected end of token stream", self.tokenizer.whole, self.tokenizer.byte))
     }
 
     /// Expect to find a token of any kind within `kinds`, then return that token
-    pub fn expect_oneof<const N: usize>(&mut self, kinds: [TokenKind; N]) -> Result<Token<'de>, VexError> {
-        let curr_loc = self.tokenizer.byte;
-        let peeked = self.peek().ok_or(VexError::new_at("Unexpected end of token stream", curr_loc))?;
-        let peeked_kind = peeked.kind;
+    pub fn expect_oneof<const N: usize>(&mut self, kinds: [TokenKind; N]) -> Result<Token<'de>, ParseError> {
+        let (peeked_kind, peeked_range) = match self.peek() {
+            Some(t) => (t.kind, t.loc_range()),
+            None => return Err(ParseError::new_at("Unexpected end of token stream", self.tokenizer.whole, self.tokenizer.byte)),
+        };
 
         if kinds.contains(&peeked_kind) {
             Ok(self.expect(peeked_kind).unwrap())
         } else {
-            Err(VexError::new_span(
-                format!("Expected to find one of {} but found a {} token", kinds.map(|k| k.to_string()).join(", "), peeked.kind),
-                peeked.loc_range(),
-            )
-            .with_src(self.tokenizer.whole))
+            Err(ParseError::new_range(
+                format!("Expected to find one of {} but found a {} token", kinds.map(|k| k.to_string()).join(", "), peeked_kind),
+                self.tokenizer.whole,
+                peeked_range,
+            ))
         }
     }
 
+    pub fn parse_vex_version(&mut self) -> Result<VexVersion, ParseError> {
+        match self.peek() {
+            Some(t) => {
+                if t.source != "VEX_rev" {
+                    return Err(ParseError::new_at("Expected to find VEX_rev", self.tokenizer.whole, self.tokenizer.byte));
+                }
+            }
+            None => return Err(ParseError::new_at("Unexpected end of token stream", self.tokenizer.whole, self.tokenizer.byte)),
+        };
+
+        self.expect_dismiss(TokenKind::Ident)?;
+        self.expect_dismiss(TokenKind::Equals)?;
+
+        let version = self.expect(TokenKind::Number)?;
+
+        let (lhs, rhs) = version
+            .source
+            .split_once(".")
+            .ok_or(ParseError::new_range("Failed to parse a Vex version", self.tokenizer.whole, version.loc_range()))?;
+        let maj: u8 = lhs
+            .parse()
+            .map_err(|_| ParseError::new_range("Failed to parse a Vex version", self.tokenizer.whole, version.loc_range()))?;
+        let min: u8 = rhs
+            .parse()
+            .map_err(|_| ParseError::new_range("Failed to parse a Vex version", self.tokenizer.whole, version.loc_range()))?;
+
+        self.expect_dismiss(TokenKind::SemiColon)?;
+        Ok(VexVersion::new(maj, min))
+    }
+
     /// Parse a [`VexRef`] from the token stream
-    pub fn parse_ref(&mut self) -> Result<VexRef, VexError> {
+    pub fn parse_ref(&mut self) -> Result<VexRef, ParseError> {
         self.expect_dismiss(TokenKind::Ref)?;
         let blockname = self.expect(TokenKind::BlockName)?.source.to_string();
         self.expect_dismiss(TokenKind::Equals)?;
@@ -163,7 +180,7 @@ impl<'de> Parser<'de> {
     }
 
     /// Parse a [`Param`] from the token stream
-    pub fn parse_param(&mut self) -> Result<Param, VexError> {
+    pub fn parse_param(&mut self) -> Result<Param, ParseError> {
         let name = self.expect(TokenKind::Ident)?.source.to_string();
         self.expect_dismiss(TokenKind::Equals)?;
 
@@ -203,7 +220,7 @@ impl<'de> Parser<'de> {
     }
 
     /// Parse a [`ParamValue`] from the token stream
-    pub fn parse_param_value(&mut self) -> Result<ParamValue, VexError> {
+    pub fn parse_param_value(&mut self) -> Result<ParamValue, ParseError> {
         let next = self.expect_oneof([TokenKind::Ident, TokenKind::Literal, TokenKind::Epoch, TokenKind::Coord, TokenKind::Number, TokenKind::Link])?;
 
         match next.kind {
@@ -225,7 +242,7 @@ impl<'de> Parser<'de> {
     }
 
     /// Parse a [`HighLevelDef`] from the token stream
-    pub fn parse_highlevel_def(&mut self) -> Result<HighLevelDef, VexError> {
+    pub fn parse_highlevel_def(&mut self) -> Result<HighLevelDef, ParseError> {
         self.expect_dismiss(TokenKind::Def)?;
         let name = self.expect_oneof([TokenKind::Ident, TokenKind::Number])?.source.to_string();
         self.expect_dismiss(TokenKind::SemiColon)?;
@@ -239,7 +256,7 @@ impl<'de> Parser<'de> {
     }
 
     /// Parse a [`Def`] from the token stream
-    pub fn parse_primitive_def(&mut self) -> Result<Def, VexError> {
+    pub fn parse_primitive_def(&mut self) -> Result<Def, ParseError> {
         self.expect_dismiss(TokenKind::Def)?;
         let name = self.expect_oneof([TokenKind::Ident, TokenKind::Number, TokenKind::Coord])?.source.to_string();
         self.expect_dismiss(TokenKind::SemiColon)?;
@@ -253,7 +270,7 @@ impl<'de> Parser<'de> {
     }
 
     /// Parse a [`Scan`] from the token stream
-    pub fn parse_scan(&mut self) -> Result<Scan, VexError> {
+    pub fn parse_scan(&mut self) -> Result<Scan, ParseError> {
         self.expect_dismiss(TokenKind::Scan)?;
         let name = self.expect_oneof([TokenKind::Ident, TokenKind::Number, TokenKind::Coord])?.source.to_string();
         self.expect_dismiss(TokenKind::SemiColon)?;
@@ -267,8 +284,17 @@ impl<'de> Parser<'de> {
     }
 
     /// Parse a [`Global`] from the token stream
-    pub fn parse_global(&mut self) -> Result<Global, VexError> {
-        let _global = self.expect_and(TokenKind::BlockName, |t| t.source == "GLOBAL", "Expected to find a GLOBAL block")?;
+    pub fn parse_global(&mut self) -> Result<Global, ParseError> {
+        match self.peek() {
+            Some(t) => {
+                if t.source != "GLOBAL" {
+                    return Err(ParseError::new_at("Expected to find a GLOBAL block", self.tokenizer.whole, self.tokenizer.byte));
+                }
+            }
+            None => return Err(ParseError::new_at("Unexpected end of token stream", self.tokenizer.whole, self.tokenizer.byte)),
+        };
+
+        self.expect_dismiss(TokenKind::BlockName)?;
         self.expect_dismiss(TokenKind::SemiColon)?;
         let mut refs = Vec::new();
         while self.peek_kind() == Some(TokenKind::Ref) && self.peek_kind().is_some() {
@@ -279,7 +305,7 @@ impl<'de> Parser<'de> {
     }
 
     /// Parse a [`HighLevelBlock`] from the token stream
-    pub fn parse_highlevel_block(&mut self) -> Result<HighLevelBlock, VexError> {
+    pub fn parse_highlevel_block(&mut self) -> Result<HighLevelBlock, ParseError> {
         let name = self.expect(TokenKind::BlockName)?.source.to_string();
         self.expect_dismiss(TokenKind::SemiColon)?;
         let mut defs = Vec::new();
@@ -291,7 +317,7 @@ impl<'de> Parser<'de> {
     }
 
     /// Parse a [`Block`] from the token stream
-    pub fn parse_primitive_block(&mut self) -> Result<Block, VexError> {
+    pub fn parse_primitive_block(&mut self) -> Result<Block, ParseError> {
         let name = self.expect(TokenKind::BlockName)?.source.to_string();
         self.expect_dismiss(TokenKind::SemiColon)?;
         let mut defs = Vec::new();
@@ -303,15 +329,24 @@ impl<'de> Parser<'de> {
     }
 
     /// Parse a [`Schedule`] from the token stream
-    pub fn parse_schedule(&mut self) -> Result<Schedule, VexError> {
-        let _schedule = self.expect_and(TokenKind::BlockName, |t| t.source == "SCHED", "Expected to find a SCHED block")?;
+    pub fn parse_schedule(&mut self) -> Result<Schedule, ParseError> {
+        match self.peek() {
+            Some(t) => {
+                if t.source != "SCHED" {
+                    return Err(ParseError::new_at("Expected to find a SCHED block", self.tokenizer.whole, self.tokenizer.byte));
+                }
+            }
+            None => return Err(ParseError::new_at("Unexpected end of token stream", self.tokenizer.whole, self.tokenizer.byte)),
+        };
+
+        self.expect_dismiss(TokenKind::BlockName)?;
         self.expect_dismiss(TokenKind::SemiColon)?;
         let mut scans = Vec::new();
         while self.peek_kind() != Some(TokenKind::BlockName) && self.peek_kind().is_some() {
             scans.push(self.parse_scan()?);
         }
 
-        Ok(scans)
+        Ok(Schedule::from(scans))
     }
 }
 
@@ -452,7 +487,7 @@ mod tests {
             $TERMINATINGBLOCK;
         ";
         let mut parser = Parser::new(inp);
-        let expected = [VexRef::new("BLOCK1", "MYKEY1"), VexRef::new("BLOCK2", "some_other_value")];
+        let expected = Global::from([VexRef::new("BLOCK1", "MYKEY1"), VexRef::new("BLOCK2", "some_other_value")]);
         assert_eq!(parser.parse_global()?, expected);
         Ok(())
     }
@@ -465,7 +500,7 @@ mod tests {
                 ref $BLOCK2 = some_other_value;
         ";
         let mut parser = Parser::new(inp);
-        let expected = [VexRef::new("BLOCK1", "MYKEY1"), VexRef::new("BLOCK2", "some_other_value")];
+        let expected = Global::from([VexRef::new("BLOCK1", "MYKEY1"), VexRef::new("BLOCK2", "some_other_value")]);
         assert_eq!(parser.parse_global()?, expected);
         Ok(())
     }

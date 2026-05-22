@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::{Read, Seek};
 use std::path::Path;
 
+use crate::error::ParseError;
 use crate::parsing::Parser;
 use crate::{Block, Global, HighLevelBlock, HighLevelDef, Schedule, VexError};
 
@@ -38,9 +39,7 @@ impl Vex {
 
     /// Open a Vex file using the provided file path
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, VexError> {
-        let path = path.as_ref().to_path_buf();
-        let fname = path.file_name().ok_or(VexError::new(format!("Unable to open file at: {}", path.display())))?;
-        let mut file = std::fs::File::open(path.clone())?;
+        let mut file = std::fs::File::open(path)?;
         let mut contents = String::new();
 
         // The first 9 bytes should be "VEX_rev ="
@@ -52,12 +51,9 @@ impl Vex {
         if &vex_rev_bytes == b"VEX_rev =" {
             file.rewind()?;
             file.read_to_string(&mut contents)?;
-            Vex::from_vex(&contents).map_err(|e| e.with_filename(fname.to_string_lossy()))
+            Vex::parse(&contents)
         } else {
-            Err(VexError::new_at("Missing VEX_rev", 0)
-                .with_src(std::str::from_utf8(&vex_rev_bytes).map_err(|_| VexError::new("Encountered invalid utf-8"))?)
-                .with_filename(fname.to_string_lossy())
-                .with_help("Are you sure this is a Vex file?"))
+            Err(VexError::MissingVexRev)
         }
     }
 
@@ -83,7 +79,7 @@ impl Vex {
     ///
     /// This will overwrite a block with the same name
     pub fn with_block(mut self, block: Block) -> Self {
-        let _ = self.primitives.insert(block.name.clone(), block);
+        let _ = self.primitives.insert(block.name().to_string(), block);
         self
     }
 
@@ -92,16 +88,8 @@ impl Vex {
         self.schedule = sched;
         self
     }
-}
 
-impl Default for Vex {
-    fn default() -> Self {
-        Vex::new()
-    }
-}
-
-impl ToFromVex for Vex {
-    fn to_vex(&self) -> String {
+    pub fn to_vex(&self) -> String {
         format!(
             "{}\n{}\n{}\n{}\n{}\n{}",
             self.rev.to_vex(),
@@ -113,7 +101,7 @@ impl ToFromVex for Vex {
         )
     }
 
-    fn to_vex_minified(&self) -> String {
+    pub fn to_vex_minified(&self) -> String {
         format!(
             "{}{}{}{}{}{}",
             self.rev.to_vex_minified(),
@@ -125,22 +113,15 @@ impl ToFromVex for Vex {
         )
     }
 
-    fn from_vex(vex: &str) -> Result<Self, VexError> {
+    pub fn parse(vex: &str) -> Result<Self, VexError> {
         Parser::new(vex).parse()
     }
 }
 
-/// Represents any type that can be converted into Vex formatted text, or parsed from it
-pub trait ToFromVex
-where
-    Self: Sized,
-{
-    /// Produce a Vex formatted [`String`]
-    fn to_vex(&self) -> String;
-    /// Produce a Vex formatted [`String`] with unnecessary whitespace removed
-    fn to_vex_minified(&self) -> String;
-    /// Parse [`Self`] from a Vex formatted string slice
-    fn from_vex(vex: &str) -> Result<Self, VexError>;
+impl Default for Vex {
+    fn default() -> Self {
+        Vex::new()
+    }
 }
 
 /// The version of a Vex file. Typically parsed from a `VEX_rev` parameter.
@@ -158,27 +139,22 @@ impl VexVersion {
     pub fn new(maj: u8, min: u8) -> Self {
         Self { maj, min }
     }
+
+    pub fn to_vex(&self) -> String {
+        format!("VEX_rev = {}.{};", self.maj, self.min)
+    }
+
+    pub fn to_vex_minified(&self) -> String {
+        format!("VEX_rev={}.{};", self.maj, self.min)
+    }
+
+    pub fn parse(vex: &str) -> Result<Self, ParseError> {
+        Parser::new(vex).parse_vex_version()
+    }
 }
 
 impl Default for VexVersion {
     fn default() -> Self {
         Self { maj: 2, min: 0 }
-    }
-}
-
-impl ToFromVex for VexVersion {
-    fn to_vex(&self) -> String {
-        format!("VEX_rev = {}.{};", self.maj, self.min)
-    }
-
-    fn to_vex_minified(&self) -> String {
-        format!("VEX_rev={}.{};", self.maj, self.min)
-    }
-
-    fn from_vex(vex: &str) -> Result<Self, VexError> {
-        let (lhs, rhs) = vex.split_once(".").ok_or(VexError::new(format!("Unable to parse a Vex version from {}", vex)))?;
-        let maj: u8 = lhs.parse().map_err(|_| VexError::new(format!("Unable to parse a Vex major version from {}", lhs)))?;
-        let min: u8 = lhs.parse().map_err(|_| VexError::new(format!("Unable to parse a Vex minor version from {}", rhs)))?;
-        Ok(Self { maj, min })
     }
 }

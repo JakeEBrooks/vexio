@@ -10,15 +10,15 @@ edition = "2024"
 
 [dependencies]
 thiserror = "2"
-miette = "7"
+miette = { version = "7", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 
 [features]
-default = ["serde"]
+default = ["serde", "miette"]
 serde = ["dep:serde"]
+miette = ["dep:miette"]
 
 [dev-dependencies]
 # For nice test error messages
 miette = { version = "7", features = ["fancy"] }
-
 serde_json = "1"

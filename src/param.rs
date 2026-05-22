@@ -1,41 +1,65 @@
-use crate::parsing::{is_coord, is_epoch, is_number, is_number_unit};
-use crate::vex::ToFromVex;
+use std::slice::{Iter, IterMut};
+
+use crate::error::ParseError;
+use crate::parsing::{Parser, is_coord, is_epoch, is_number, is_number_unit};
 
 /// A Vex parameter
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize), derive(serde::Deserialize))]
 pub struct Param {
     /// The name of this parameter
-    pub name: String,
+    name: String,
     /// The values associated with this parameter
-    pub values: Vec<ParamValue>,
+    values: Vec<ParamValue>,
 }
 
 impl Param {
     /// Construct a new [`Param`] from a `name` and a series of [`ParamValue`]s.
-    pub fn new<S, I>(name: S, values: I) -> Self
-    where
-        S: AsRef<str>,
-        I: Into<Vec<ParamValue>>,
-    {
+    pub fn new(name: impl AsRef<str>, values: impl Into<Vec<ParamValue>>) -> Self {
         Self {
             name: name.as_ref().to_string(),
             values: values.into(),
         }
     }
-}
 
-impl ToFromVex for Param {
-    fn to_vex(&self) -> String {
+    pub fn new_empty(name: impl AsRef<str>) -> Self {
+        Self::new(name, [])
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn add_value(&mut self, value: ParamValue) {
+        self.values.push(value);
+    }
+
+    pub fn values(&self) -> Iter<'_, ParamValue> {
+        self.values.iter()
+    }
+
+    pub fn values_mut(&mut self) -> IterMut<'_, ParamValue> {
+        self.values.iter_mut()
+    }
+
+    pub fn as_slice(&self) -> &[ParamValue] {
+        self.values.as_slice()
+    }
+
+    pub fn as_mut_slice(&mut self) -> &mut [ParamValue] {
+        self.values.as_mut_slice()
+    }
+
+    pub fn to_vex(&self) -> String {
         format!("{} = {};", self.name, self.values.iter().map(|v| v.to_vex()).collect::<Vec<String>>().join(" : "))
     }
 
-    fn to_vex_minified(&self) -> String {
+    pub fn to_vex_minified(&self) -> String {
         format!("{}={};", self.name, self.values.iter().map(|v| v.to_vex_minified()).collect::<Vec<String>>().join(":"))
     }
 
-    fn from_vex(vex: &str) -> Result<Self, crate::VexError> {
-        crate::parsing::Parser::new(vex).parse_param()
+    pub fn parse(vex: &str) -> Result<Self, ParseError> {
+        Parser::new(vex).parse_param()
     }
 }
 
@@ -62,6 +86,9 @@ macro_rules! param {
     ($name:literal = $($value:literal):*) => {
         $crate::Param::new(format!($name), [$($crate::ParamValue::new($value)),*])
     };
+    ($name:literal) => {
+        $crate::Param::new_empty(format!($name))
+    };
 }
 
 /// A single value of a defined Vex [`Param`].
@@ -71,9 +98,9 @@ macro_rules! param {
 #[cfg_attr(feature = "serde", derive(serde::Serialize), derive(serde::Deserialize))]
 pub struct ParamValue {
     /// The source text of the value
-    pub source: String,
+    source: String,
     /// The kind of this value
-    pub kind: ParamValueKind,
+    kind: ParamValueKind,
 }
 
 impl ParamValue {
@@ -106,22 +133,39 @@ impl ParamValue {
         }
     }
 
+    pub fn source(&self) -> &str {
+        &self.source
+    }
+
     /// Construct a new [`ParamValue`] of kind [`ParamValueKind::Empty`].
     pub fn empty() -> Self {
         Self {
-            source: String::new(),
+            source: " ".to_string(),
             kind: ParamValueKind::Empty,
         }
-    }
-
-    /// Return `true` if this value is of kind [`ParamValueKind::Empty`].
-    pub fn is_empty(&self) -> bool {
-        self.kind == ParamValueKind::Empty
     }
 
     /// Return the [`ParamValueKind`] of this [`ParamValue`]
     pub fn kind(&self) -> ParamValueKind {
         self.kind
+    }
+
+    pub fn to_vex(&self) -> String {
+        match self.kind {
+            ParamValueKind::Link => format!("&{}", self.source),
+            _ => self.source.clone(),
+        }
+    }
+
+    pub fn to_vex_minified(&self) -> String {
+        match self.kind {
+            ParamValueKind::Link => format!("&{}", self.source),
+            _ => self.source.clone(),
+        }
+    }
+
+    pub fn parse(vex: &str) -> Result<Self, ParseError> {
+        Parser::new(vex).parse_param_value()
     }
 }
 
@@ -143,26 +187,6 @@ fn determine_param_value_kind(src: impl AsRef<str>) -> ParamValueKind {
         ParamValueKind::Empty
     } else {
         ParamValueKind::Ident
-    }
-}
-
-impl ToFromVex for ParamValue {
-    fn to_vex(&self) -> String {
-        match self.kind {
-            ParamValueKind::Link => format!("&{}", self.source),
-            _ => self.source.clone(),
-        }
-    }
-
-    fn to_vex_minified(&self) -> String {
-        match self.kind {
-            ParamValueKind::Link => format!("&{}", self.source),
-            _ => self.source.clone(),
-        }
-    }
-
-    fn from_vex(vex: &str) -> Result<Self, crate::VexError> {
-        crate::parsing::Parser::new(vex).parse_param_value()
     }
 }
 

@@ -1,20 +1,57 @@
+use std::slice::{Iter, IterMut};
+
 use crate::Param;
-use crate::vex::ToFromVex;
+use crate::error::ParseError;
+use crate::parsing::Parser;
 
 /// Represents the unique `SCHED` block within a Vex file.
-pub type Schedule = Vec<Scan>;
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize), derive(serde::Deserialize))]
+pub struct Schedule {
+    scans: Vec<Scan>,
+}
 
-impl ToFromVex for Schedule {
-    fn to_vex(&self) -> String {
-        format!("$SCHED;\n{}", self.iter().map(|s| s.to_vex()).collect::<Vec<String>>().join("\n"))
+impl Schedule {
+    pub fn new() -> Self {
+        Self { scans: Vec::new() }
     }
 
-    fn to_vex_minified(&self) -> String {
-        format!("$SCHED;{}", self.iter().map(|s| s.to_vex_minified()).collect::<Vec<String>>().join(""))
+    pub fn add_scan(&mut self, scan: Scan) {
+        self.scans.push(scan);
     }
 
-    fn from_vex(vex: &str) -> Result<Self, crate::VexError> {
-        crate::parsing::Parser::new(vex).parse_schedule()
+    pub fn scans(&self) -> Iter<'_, Scan> {
+        self.scans.iter()
+    }
+
+    pub fn scans_mut(&mut self) -> IterMut<'_, Scan> {
+        self.scans.iter_mut()
+    }
+
+    pub fn scan_slice(&self) -> &[Scan] {
+        self.scans.as_slice()
+    }
+
+    pub fn scan_mut_slice(&mut self) -> &mut [Scan] {
+        self.scans.as_mut_slice()
+    }
+
+    pub fn to_vex(&self) -> String {
+        format!("$SCHED;\n{}", self.scans.iter().map(|s| s.to_vex()).collect::<Vec<String>>().join("\n"))
+    }
+
+    pub fn to_vex_minified(&self) -> String {
+        format!("$SCHED;{}", self.scans.iter().map(|s| s.to_vex_minified()).collect::<Vec<String>>().join(""))
+    }
+
+    pub fn parse(vex: &str) -> Result<Self, ParseError> {
+        Parser::new(vex).parse_schedule()
+    }
+}
+
+impl<I: Into<Vec<Scan>>> From<I> for Schedule {
+    fn from(value: I) -> Self {
+        Schedule { scans: value.into() }
     }
 }
 
@@ -23,23 +60,47 @@ impl ToFromVex for Schedule {
 #[cfg_attr(feature = "serde", derive(serde::Serialize), derive(serde::Deserialize))]
 pub struct Scan {
     /// The name of this [`Scan`]
-    pub name: String,
+    name: String,
     /// The [`Param`]s associated with this [`Scan`]
-    pub params: Vec<Param>,
+    params: Vec<Param>,
 }
 
 impl Scan {
-    /// Construct a new [`Scan`] from a series of [`Param`]s
-    pub fn new<S: AsRef<str>, P: Into<Vec<Param>>>(name: S, params: P) -> Self {
+    /// Construct a new [`Scan`] from a `name` and a series of [`Param`]s.
+    pub fn new<S: AsRef<str>, I: Into<Vec<Param>>>(name: S, params: I) -> Self {
         Self {
             name: name.as_ref().to_string(),
             params: params.into(),
         }
     }
-}
 
-impl ToFromVex for Scan {
-    fn to_vex(&self) -> String {
+    /// Construct a new [`Scan`] with no [`Param`]s from a `name`
+    pub fn new_empty(name: impl AsRef<str>) -> Self {
+        Self::new(name, [])
+    }
+
+    /// Get the name of this scan
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn get(&self, name: impl AsRef<str>) -> Vec<&Param> {
+        self.params.iter().filter(|p| p.name() == name.as_ref()).collect()
+    }
+
+    pub fn get_mut(&mut self, name: impl AsRef<str>) -> Vec<&mut Param> {
+        self.params.iter_mut().filter(|p| p.name() == name.as_ref()).collect()
+    }
+
+    pub fn params(&self) -> Iter<'_, Param> {
+        self.params.iter()
+    }
+
+    pub fn params_mut(&mut self) -> IterMut<'_, Param> {
+        self.params.iter_mut()
+    }
+
+    pub fn to_vex(&self) -> String {
         format!(
             "scan {};\n{}\nendscan;\n",
             self.name,
@@ -47,7 +108,7 @@ impl ToFromVex for Scan {
         )
     }
 
-    fn to_vex_minified(&self) -> String {
+    pub fn to_vex_minified(&self) -> String {
         format!(
             "scan {};{}endscan;",
             self.name,
@@ -55,8 +116,8 @@ impl ToFromVex for Scan {
         )
     }
 
-    fn from_vex(vex: &str) -> Result<Self, crate::VexError> {
-        crate::parsing::Parser::new(vex).parse_scan()
+    pub fn parse(vex: &str) -> Result<Self, ParseError> {
+        Parser::new(vex).parse_scan()
     }
 }
 

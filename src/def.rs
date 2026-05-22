@@ -1,13 +1,17 @@
-use crate::{Param, ToFromVex, VexRef};
+use std::slice::{Iter, IterMut};
+
+use crate::error::ParseError;
+use crate::parsing::Parser;
+use crate::{Param, VexRef};
 
 /// A `def` block within a high level Vex block
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize), derive(serde::Deserialize))]
 pub struct HighLevelDef {
     /// The name of this [`HighLevelDef`]
-    pub name: String,
+    name: String,
     /// The [`VexRef`]s within this high level def block
-    pub refs: Vec<VexRef>,
+    refs: Vec<VexRef>,
 }
 
 impl HighLevelDef {
@@ -17,6 +21,21 @@ impl HighLevelDef {
             name: name.as_ref().to_string(),
             refs: refs.into(),
         }
+    }
+
+    /// Construct a new [`HighLevelDef`] with no [`VexRef`]s from a `name`
+    pub fn new_empty(name: impl AsRef<str>) -> Self {
+        Self::new(name, [])
+    }
+
+    /// Get the name of this def block
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Add a [`VexRef`] to this [`HighLevelDef`]
+    pub fn add_ref(&mut self, refr: VexRef) {
+        self.refs.push(refr);
     }
 
     /// Retrieve references to all [`VexRef`]s with block names matching matching `blk`.
@@ -29,7 +48,7 @@ impl HighLevelDef {
     /// assert_eq!(hldef.get("BLK1"), vec![&refr!("BLK1" = "my_key"), &refr!("BLK1" = "my_key2")])
     /// ```
     pub fn get(&self, blk: impl AsRef<str>) -> Vec<&VexRef> {
-        self.refs.iter().filter(|r| r.blockname == blk.as_ref()).collect()
+        self.refs.iter().filter(|r| r.blockname() == blk.as_ref()).collect()
     }
 
     /// Retrieve mutable references to all [`VexRef`]s with block names matching matching `blk`.
@@ -42,12 +61,21 @@ impl HighLevelDef {
     /// assert_eq!(hldef.get_mut("BLK1"), vec![&mut refr!("BLK1" = "my_key"), &mut refr!("BLK1" = "my_key2")])
     /// ```
     pub fn get_mut(&mut self, blk: impl AsRef<str>) -> Vec<&mut VexRef> {
-        self.refs.iter_mut().filter(|r| r.blockname == blk.as_ref()).collect()
+        self.refs.iter_mut().filter(|r| r.blockname() == blk.as_ref()).collect()
     }
-}
 
-impl ToFromVex for HighLevelDef {
-    fn to_vex(&self) -> String {
+    /// Return an iterator over all [`VexRef`]s in this [`HighLevelDef`].
+    pub fn refs(&self) -> Iter<'_, VexRef> {
+        self.refs.iter()
+    }
+
+    /// Return an iterator of mutable references over all [`VexRef`]s in this [`HighLevelDef`].
+    pub fn refs_mut(&mut self) -> IterMut<'_, VexRef> {
+        self.refs.iter_mut()
+    }
+
+    /// Get a representation of this high level def as a Vex formatted string
+    pub fn to_vex(&self) -> String {
         format!(
             "def {};\n{}\nenddef;\n",
             self.name,
@@ -55,7 +83,8 @@ impl ToFromVex for HighLevelDef {
         )
     }
 
-    fn to_vex_minified(&self) -> String {
+    /// Get a representation of this block as a Vex formatted string, with unnecessary whitespace removed
+    pub fn to_vex_minified(&self) -> String {
         format!(
             "def {};{}enddef;",
             self.name,
@@ -63,8 +92,19 @@ impl ToFromVex for HighLevelDef {
         )
     }
 
-    fn from_vex(vex: &str) -> Result<Self, crate::VexError> {
-        crate::parsing::Parser::new(vex).parse_highlevel_def()
+    /// Parse a [`HighLevelDef`] from a string slice
+    pub fn parse(vex: &str) -> Result<Self, ParseError> {
+        Parser::new(vex).parse_highlevel_def()
+    }
+
+    /// View a slice of [`VexRef`]s
+    pub fn as_slice(&self) -> &[VexRef] {
+        self.refs.as_slice()
+    }
+
+    /// View a mutable slice of [`VexRef`]s
+    pub fn as_mut_slice(&mut self) -> &mut [VexRef] {
+        self.refs.as_mut_slice()
     }
 }
 
@@ -73,9 +113,9 @@ impl ToFromVex for HighLevelDef {
 #[cfg_attr(feature = "serde", derive(serde::Serialize), derive(serde::Deserialize))]
 pub struct Def {
     /// The name of this [`Def`] block
-    pub name: String,
+    name: String,
     /// The [`Param`]s within this def block
-    pub params: Vec<Param>,
+    params: Vec<Param>,
 }
 
 impl Def {
@@ -85,6 +125,16 @@ impl Def {
             name: name.as_ref().to_string(),
             params: params.into(),
         }
+    }
+
+    /// Construct a new [`Def`] with no [`Param`]s from a `name`
+    pub fn new_empty(name: impl AsRef<str>) -> Self {
+        Self::new(name, [])
+    }
+
+    /// Get the name of this def block
+    pub fn name(&self) -> &str {
+        &self.name
     }
 
     /// Retrieve references to all [`Param`]s with parameter names matching matching `name`.
@@ -104,7 +154,7 @@ impl Def {
     /// ])
     /// ```
     pub fn get(&self, name: impl AsRef<str>) -> Vec<&Param> {
-        self.params.iter().filter(|p| p.name == name.as_ref()).collect()
+        self.params.iter().filter(|p| p.name() == name.as_ref()).collect()
     }
 
     /// Retrieve mutable references to all [`Param`]s with parameter names matching matching `name`.
@@ -124,12 +174,18 @@ impl Def {
     /// ])
     /// ```
     pub fn get_mut(&mut self, name: impl AsRef<str>) -> Vec<&mut Param> {
-        self.params.iter_mut().filter(|p| p.name == name.as_ref()).collect()
+        self.params.iter_mut().filter(|p| p.name() == name.as_ref()).collect()
     }
-}
 
-impl ToFromVex for Def {
-    fn to_vex(&self) -> String {
+    pub fn params(&self) -> Iter<'_, Param> {
+        self.params.iter()
+    }
+
+    pub fn params_mut(&mut self) -> IterMut<'_, Param> {
+        self.params.iter_mut()
+    }
+
+    pub fn to_vex(&self) -> String {
         format!(
             "def {};\n{}\nenddef;\n",
             self.name,
@@ -137,7 +193,7 @@ impl ToFromVex for Def {
         )
     }
 
-    fn to_vex_minified(&self) -> String {
+    pub fn to_vex_minified(&self) -> String {
         format!(
             "def {};{}enddef;",
             self.name,
@@ -145,8 +201,16 @@ impl ToFromVex for Def {
         )
     }
 
-    fn from_vex(vex: &str) -> Result<Self, crate::VexError> {
-        crate::parsing::Parser::new(vex).parse_primitive_def()
+    pub fn parse(vex: &str) -> Result<Self, ParseError> {
+        Parser::new(vex).parse_primitive_def()
+    }
+
+    pub fn as_slice(&self) -> &[Param] {
+        self.params.as_slice()
+    }
+
+    pub fn as_mut_slice(&mut self) -> &mut [Param] {
+        self.params.as_mut_slice()
     }
 }
 
@@ -181,6 +245,9 @@ macro_rules! def {
             format!($name),
             [$( $crate::Param::new(format!($param_name), [$( $crate::ParamValue::new(format!($param)) ),*]) ),*]
         )
+    };
+    ($name:literal) => {
+        $crate::Def::new_empty(format!($name))
     };
 }
 
@@ -271,14 +338,14 @@ mod tests {
     #[test]
     fn test_parse_tofrom_hldef() -> miette::Result<()> {
         let start = HighLevelDef::new("my_def", [refr!("BLK1" = "my_key"), refr!("BLK2" = "key2" : "qual1")]);
-        assert_eq!(start, HighLevelDef::from_vex(start.to_vex().as_str())?);
+        assert_eq!(start, HighLevelDef::parse(start.to_vex().as_str())?);
         Ok(())
     }
 
     #[test]
     fn test_parse_tofrom_def() -> miette::Result<()> {
         let start = def!("my_def"; "param1" = "val1"; "param2" = "val2" : "val3";);
-        assert_eq!(start, Def::from_vex(start.to_vex().as_str())?);
+        assert_eq!(start, Def::parse(start.to_vex().as_str())?);
         Ok(())
     }
 }
