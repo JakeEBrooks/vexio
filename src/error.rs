@@ -86,6 +86,10 @@ impl ParseError {
         }
     }
 
+    pub fn description(&self) -> &str {
+        &self.desc
+    }
+
     pub fn byte_start(&self) -> usize {
         self.start
     }
