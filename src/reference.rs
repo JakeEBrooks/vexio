@@ -134,17 +134,19 @@ macro_rules! refr {
 
 #[cfg(test)]
 mod tests {
+    use crate::VexError;
+
     use super::*;
 
     #[test]
-    fn test_refr_macro() -> miette::Result<()> {
+    fn test_refr_macro() -> Result<(), VexError> {
         let refr = refr!("MYBLOCK" = "keyword");
         assert_eq!(refr, VexRef::new("MYBLOCK", "keyword"));
         Ok(())
     }
 
     #[test]
-    fn test_refr_macro_with_quals() -> miette::Result<()> {
+    fn test_refr_macro_with_quals() -> Result<(), VexError> {
         let refr = refr!("MYBLOCK" = "keyword" : "qual1" : "qual2");
         assert_eq!(refr, VexRef::new_with_quals("MYBLOCK", "keyword", ["qual1", "qual2"]));
         Ok(())

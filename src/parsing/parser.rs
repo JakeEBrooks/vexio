@@ -356,7 +356,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_param() -> Result<(), miette::Error> {
+    fn test_parse_param() -> Result<(), VexError> {
         let inp = "some_param = : with : 20 m : values;";
         let mut parser = Parser::new(inp);
         let expected = Param::new(
@@ -373,7 +373,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_param_values_link() -> Result<(), miette::Error> {
+    fn test_parse_param_values_link() -> Result<(), VexError> {
         let inp = "&mylink";
         let mut parser = Parser::new(inp);
         let expected = ParamValue::new_unchecked("mylink", crate::param::ParamValueKind::Link);
@@ -382,7 +382,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_ref() -> Result<(), miette::Error> {
+    fn test_parse_ref() -> Result<(), VexError> {
         let inp = "ref $MYBLOCKNAME = keyword;";
         let mut parser = Parser::new(inp);
         let expected = VexRef::new("MYBLOCKNAME", "keyword");
@@ -391,7 +391,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_ref_with_qualifiers() -> Result<(), miette::Error> {
+    fn test_parse_ref_with_qualifiers() -> Result<(), VexError> {
         let inp = "ref $MYBLOCKNAME = keyword : with : some : qualifiers;";
         let mut parser = Parser::new(inp);
         let expected = VexRef::new_with_quals("MYBLOCKNAME", "keyword", ["with", "some", "qualifiers"]);
@@ -400,7 +400,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_highlevel_def() -> Result<(), miette::Error> {
+    fn test_parse_highlevel_def() -> Result<(), VexError> {
         let inp = "
             def my_def;
                 ref $MYBLOCK1 = mykey1;
@@ -420,7 +420,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_primitive_def() -> Result<(), miette::Error> {
+    fn test_parse_primitive_def() -> Result<(), VexError> {
         let inp = "
             def my_def;
                 param1 = myvalue1;
@@ -449,7 +449,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_scan() -> Result<(), miette::Error> {
+    fn test_parse_scan() -> Result<(), VexError> {
         let inp = "
             scan my_scan;
                 station = station1;
@@ -478,7 +478,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_global_terminated() -> Result<(), miette::Error> {
+    fn test_parse_global_terminated() -> Result<(), VexError> {
         let inp = "
             $GLOBAL;
                 ref $BLOCK1 = MYKEY1;
@@ -493,7 +493,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_global_unterminated() -> Result<(), miette::Error> {
+    fn test_parse_global_unterminated() -> Result<(), VexError> {
         let inp = "
             $GLOBAL;
                 ref $BLOCK1 = MYKEY1;
@@ -506,7 +506,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_highlevel_block() -> Result<(), miette::Error> {
+    fn test_parse_highlevel_block() -> Result<(), VexError> {
         let inp = "
             $MYBLOCK;
             def mydef1;

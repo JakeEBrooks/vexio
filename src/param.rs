@@ -207,10 +207,12 @@ pub enum ParamValueKind {
 
 #[cfg(test)]
 mod tests {
+    use crate::VexError;
+
     use super::*;
 
     #[test]
-    fn test_param_macro() -> miette::Result<()> {
+    fn test_param_macro() -> Result<(), VexError> {
         let p = param!("my_param" = "keyword");
         assert_eq!(p, Param::new("my_param", [ParamValue::new("keyword")]));
         Ok(())

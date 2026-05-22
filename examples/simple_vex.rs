@@ -1,8 +1,8 @@
 //! This example shows how to construct a simple [`Vex`] file manually, using some of the examples from the Vex specification
 
-use vexio::{Block, Global, HighLevelDef, Schedule, Vex, def, refr, scan};
+use vexio::{Block, Global, HighLevelDef, Schedule, Vex, VexError, def, refr, scan};
 
-fn main() -> miette::Result<()> {
+fn main() -> Result<(), VexError> {
     let global: Global = Global::from(vec![
         refr!("EXPER" = "EXP1387"),
         refr!("SCHEDULING_PARAMS" = "SKED1"),

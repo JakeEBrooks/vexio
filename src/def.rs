@@ -259,7 +259,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_def_macro() -> miette::Result<(), VexError> {
+    fn test_def_macro() -> Result<(), VexError> {
         let def = def!("some_name";
             "param1" = "val" : "val2";
         );
@@ -281,7 +281,7 @@ mod tests {
     }
 
     #[test]
-    fn test_def_macro_2() -> miette::Result<(), VexError> {
+    fn test_def_macro_2() -> Result<(), VexError> {
         let param_name = "param_subst";
         let def = def!("some_name";
             "{param_name}" = "val" : "val2";
@@ -303,7 +303,7 @@ mod tests {
     }
 
     #[test]
-    fn test_def_macro_3() -> miette::Result<(), VexError> {
+    fn test_def_macro_3() -> Result<(), VexError> {
         let param_name = "my_parameter".to_string();
         let num = 64;
         let def = def!("my_def_block";
@@ -336,14 +336,14 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_tofrom_hldef() -> miette::Result<()> {
+    fn test_parse_tofrom_hldef() -> Result<(), VexError> {
         let start = HighLevelDef::new("my_def", [refr!("BLK1" = "my_key"), refr!("BLK2" = "key2" : "qual1")]);
         assert_eq!(start, HighLevelDef::parse(start.to_vex().as_str())?);
         Ok(())
     }
 
     #[test]
-    fn test_parse_tofrom_def() -> miette::Result<()> {
+    fn test_parse_tofrom_def() -> Result<(), VexError> {
         let start = def!("my_def"; "param1" = "val1"; "param2" = "val2" : "val3";);
         assert_eq!(start, Def::parse(start.to_vex().as_str())?);
         Ok(())

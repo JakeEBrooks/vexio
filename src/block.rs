@@ -176,7 +176,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_tofrom_block() -> miette::Result<()> {
+    fn test_parse_tofrom_block() -> Result<(), VexError> {
         let start = Block::new(
             "my_block",
             [
@@ -195,7 +195,7 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_tofrom_highlevelblock() -> miette::Result<()> {
+    fn test_parse_tofrom_highlevelblock() -> Result<(), VexError> {
         let start = HighLevelBlock::new("MY_BLOCK", [HighLevelDef::new("my_def", [refr!("BLK1" = "my_key"), refr!("BLK2" = "my_key2")])]);
         assert_eq!(start, HighLevelBlock::parse(start.to_vex().as_str())?);
         Ok(())

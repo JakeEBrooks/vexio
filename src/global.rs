@@ -47,12 +47,12 @@ impl<I: Into<Vec<VexRef>>> From<I> for Global {
 
 #[cfg(test)]
 mod tests {
-    use crate::refr;
+    use crate::{VexError, refr};
 
     use super::*;
 
     #[test]
-    fn test_parse_tofrom_global() -> miette::Result<()> {
+    fn test_parse_tofrom_global() -> Result<(), VexError> {
         let start = Global::from([refr!("MY_BLOCK" = "some_key" : "qual1"), refr!("MY_BLOCK2" = "some_key2")]);
         assert_eq!(start, Global::parse(start.to_vex().as_str())?);
         Ok(())
