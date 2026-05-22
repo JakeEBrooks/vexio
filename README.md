@@ -31,6 +31,8 @@ First and foremost, `vexio` provides a detailed error message when things go wro
 
 ![vexio terminal error](./images/terminal_output.png)
 
+The `Diagnostic` trait provided by `miette` is implemented only when the `miette` feature of `vexio` is enabled (which is _disabled_ by default).
+
 ### Convenient Construction
 
 `vexio` provides some handy macros for constructing Vex components, like constructing a `def` block:
