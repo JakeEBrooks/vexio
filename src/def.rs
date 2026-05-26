@@ -177,14 +177,17 @@ impl Def {
         self.params.iter_mut().filter(|p| p.name() == name.as_ref()).collect()
     }
 
+    /// Return an iterator over the [`Param`]s in this def
     pub fn params(&self) -> Iter<'_, Param> {
         self.params.iter()
     }
 
+    /// Return a mutable iterator over the [`Param`]s in this def
     pub fn params_mut(&mut self) -> IterMut<'_, Param> {
         self.params.iter_mut()
     }
 
+    /// Return a Vex formatted string representing this structure
     pub fn to_vex(&self) -> String {
         format!(
             "def {};\n{}\nenddef;\n",
@@ -193,6 +196,7 @@ impl Def {
         )
     }
 
+    /// Return a Vex formatted string representing this structure, with unnecessary whitespace removed
     pub fn to_vex_minified(&self) -> String {
         format!(
             "def {};{}enddef;",
@@ -201,14 +205,17 @@ impl Def {
         )
     }
 
+    /// Attempt to parse a [`Def`] from a Vex formatted string
     pub fn parse(vex: &str) -> Result<Self, ParseError> {
         Parser::new(vex).parse_primitive_def()
     }
 
+    /// Return a slice of parameters in this def
     pub fn as_slice(&self) -> &[Param] {
         self.params.as_slice()
     }
 
+    /// Return a mutable slice of parameters in this def
     pub fn as_mut_slice(&mut self) -> &mut [Param] {
         self.params.as_mut_slice()
     }

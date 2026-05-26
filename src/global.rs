@@ -10,30 +10,37 @@ pub struct Global {
 }
 
 impl Global {
+    /// Make a new, empty, Global block
     pub fn new() -> Self {
         Self { refs: Vec::new() }
     }
 
+    /// Add a [`VexRef`] to this global block
     pub fn add_ref(&mut self, refr: VexRef) {
         self.refs.push(refr);
     }
 
+    /// View this global block as a slice of references
     pub fn as_slice(&self) -> &[VexRef] {
         self.refs.as_slice()
     }
 
+    /// View this global block as a mutable slice of references
     pub fn as_mut_slice(&mut self) -> &mut [VexRef] {
         self.refs.as_mut_slice()
     }
 
+    /// Get a representation of this global block as a Vex formatted string
     pub fn to_vex(&self) -> String {
         format!("$GLOBAL;\n{}\n", self.refs.iter().map(|r| format!("\t{}", r.to_vex())).collect::<Vec<String>>().join("\n"))
     }
 
+    /// Get a representation of this global block as a Vex formatted string, with unneccesary whitespace removed
     pub fn to_vex_minified(&self) -> String {
         format!("$GLOBAL;{}", self.refs.iter().map(|r| r.to_vex_minified()).collect::<Vec<String>>().join(""))
     }
 
+    /// Parse a [`Global`] block from a string slice
     pub fn parse(vex: &str) -> Result<Self, ParseError> {
         Parser::new(vex).parse_global()
     }

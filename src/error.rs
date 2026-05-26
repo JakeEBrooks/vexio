@@ -5,6 +5,13 @@ use std::ops::Range;
 use miette::{Diagnostic, LabeledSpan, SourceCode, SourceOffset, SourceSpan};
 use thiserror::Error;
 
+/// Indicates a range of failures when interacting with Vex files
+///
+/// This is the primary error type of `vexio` and includes [`ParseError`].
+///
+/// If the crate feature `miette` is enabled, VexError implements [`miette::Diagnostic`] and can be used to print
+/// detailed error messages to the terminal for user facing applications
+#[allow(missing_docs)]
 #[derive(Debug, Error)]
 pub enum VexError {
     #[error("Failed to parse VEX_rev, are you sure this is a Vex file?")]
@@ -49,6 +56,14 @@ impl Diagnostic for VexError {
     }
 }
 
+/// Indicates a failure to parse some Vex data structure from
+/// a string of characters
+///
+/// Contains detailed information on the location of the syntax error, and provides a description
+/// of the cause of the error
+///
+/// If the crate feature `miette` is enabled, ParseError implements [`miette::Diagnostic`] and can be used to print
+/// detailed error messages to the terminal for user facing applications
 #[derive(Debug, Error)]
 #[error("Failed to parse Vex: {desc}")]
 pub struct ParseError {
@@ -56,50 +71,62 @@ pub struct ParseError {
     src: String,
     start: usize,
     end: usize,
+    line: usize,
+    col: usize,
 }
 
 impl ParseError {
+    /// Make a new error with a textual description of the error `desc`, the source of the error `source`, and the _byte_ start and end locations
     pub fn new(desc: impl AsRef<str>, source: impl AsRef<str>, start: usize, end: usize) -> Self {
+        let (line, col) = count_lines_cols(&source, start);
         Self {
             desc: desc.as_ref().to_string(),
             src: source.as_ref().to_string(),
             start,
             end,
+            line,
+            col,
         }
     }
 
+    /// Make a new error with a textual description of the error `desc`, the source of the error `source`, and the _byte_ location
     pub fn new_at(desc: impl AsRef<str>, source: impl AsRef<str>, loc: usize) -> Self {
-        Self {
-            desc: desc.as_ref().to_string(),
-            src: source.as_ref().to_string(),
-            start: loc,
-            end: loc,
-        }
+        Self::new(desc, source, loc, loc)
     }
 
+    /// Make a new error with a textual description of the error `desc`, the source of the error `source`, and the _byte_ start and end locations as a [`Range`]
     pub fn new_range(desc: impl AsRef<str>, source: impl AsRef<str>, at: Range<usize>) -> Self {
-        Self {
-            desc: desc.as_ref().to_string(),
-            src: source.as_ref().to_string(),
-            start: at.start,
-            end: at.end,
-        }
+        Self::new(desc, source, at.start, at.end)
     }
 
+    /// The error description
     pub fn description(&self) -> &str {
         &self.desc
     }
 
+    /// The byte start location of the error
     pub fn byte_start(&self) -> usize {
         self.start
     }
 
+    /// The byte end location of the error
     pub fn byte_end(&self) -> usize {
         self.end
     }
 
+    /// The byte range of the error
     pub fn byte_range(&self) -> Range<usize> {
         self.start..self.end
+    }
+
+    /// The line number containing the start of the error
+    pub fn line(&self) -> usize {
+        self.line
+    }
+
+    /// The column containing the start of the error
+    pub fn col(&self) -> usize {
+        self.col
     }
 }
 
@@ -118,4 +145,27 @@ impl Diagnostic for ParseError {
     fn source_code(&self) -> Option<&dyn SourceCode> {
         Some(&self.src)
     }
+}
+
+fn count_lines_cols(src: impl AsRef<str>, byte_offset: usize) -> (usize, usize) {
+    let mut lines = 0usize;
+    let mut cols = 0usize;
+    let mut offset = 0usize;
+
+    let char_iter = src.as_ref().chars();
+    for c in char_iter {
+        if offset >= byte_offset {
+            break;
+        } else {
+            if c == '\n' {
+                lines += 1;
+                cols = 0;
+            } else {
+                cols += 1;
+            }
+        }
+        offset += c.len_utf8()
+    }
+
+    (lines, cols)
 }

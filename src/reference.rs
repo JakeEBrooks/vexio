@@ -44,34 +44,42 @@ impl VexRef {
         }
     }
 
+    /// Get the blockname referenced by this ref
     pub fn blockname(&self) -> &str {
         &self.blockname
     }
 
+    /// Get the def block referenced by this ref
     pub fn defname(&self) -> &str {
         &self.keyword
     }
 
+    /// Get an iterator over the qualifiers in this reference
     pub fn quals(&self) -> Iter<'_, String> {
         self.qualifiers.iter()
     }
 
+    /// Get a mutable iterator over the qualifiers in this reference
     pub fn quals_mut(&mut self) -> IterMut<'_, String> {
         self.qualifiers.iter_mut()
     }
 
+    /// View this reference as a slice of its qualifiers
     pub fn quals_slice(&self) -> &[String] {
         self.qualifiers.as_slice()
     }
 
+    /// View this reference as a mutable slice of its qualifiers
     pub fn quals_mut_slice(&mut self) -> &mut [String] {
         self.qualifiers.as_mut_slice()
     }
 
+    /// Add a qualifer to this reference
     pub fn add_quals(&mut self, qual: impl AsRef<str>) {
         self.qualifiers.push(qual.as_ref().to_string());
     }
 
+    /// Get a representation of this reference as a Vex formatted string
     pub fn to_vex(&self) -> String {
         if self.qualifiers.is_empty() {
             format!("ref ${} = {};", self.blockname, self.keyword)
@@ -85,6 +93,7 @@ impl VexRef {
         }
     }
 
+    /// Get a representation of this reference as a Vex formatted string, with unneccesary whitespace removed
     pub fn to_vex_minified(&self) -> String {
         if self.qualifiers.is_empty() {
             format!("ref ${}={};", self.blockname, self.keyword)
@@ -98,6 +107,7 @@ impl VexRef {
         }
     }
 
+    /// Parse a [`VexRef`] from a string slice
     pub fn parse(vex: &str) -> Result<Self, ParseError> {
         Parser::new(vex).parse_ref()
     }

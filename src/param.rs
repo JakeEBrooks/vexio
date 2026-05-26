@@ -22,42 +22,52 @@ impl Param {
         }
     }
 
+    /// Construct a new parameter with no values
     pub fn new_empty(name: impl AsRef<str>) -> Self {
         Self::new(name, [])
     }
 
+    /// Get the name of this parameter
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// Add a value to this parameter
     pub fn add_value(&mut self, value: ParamValue) {
         self.values.push(value);
     }
 
+    /// Return an iterator over the values of this parameter
     pub fn values(&self) -> Iter<'_, ParamValue> {
         self.values.iter()
     }
 
+    /// Return a mutable iterator over the values of this parameter
     pub fn values_mut(&mut self) -> IterMut<'_, ParamValue> {
         self.values.iter_mut()
     }
 
+    /// View this parameter as a slice of values
     pub fn as_slice(&self) -> &[ParamValue] {
         self.values.as_slice()
     }
 
+    /// View this parameter as a mutable slice of values
     pub fn as_mut_slice(&mut self) -> &mut [ParamValue] {
         self.values.as_mut_slice()
     }
 
+    /// Get a representation of this parameter as a Vex formatted string
     pub fn to_vex(&self) -> String {
         format!("{} = {};", self.name, self.values.iter().map(|v| v.to_vex()).collect::<Vec<String>>().join(" : "))
     }
 
+    /// Get a representation of this parameter as a Vex formatted string, with unneccesary whitespace removed
     pub fn to_vex_minified(&self) -> String {
         format!("{}={};", self.name, self.values.iter().map(|v| v.to_vex_minified()).collect::<Vec<String>>().join(":"))
     }
 
+    /// Parse a Vex parameter block from a string slice
     pub fn parse(vex: &str) -> Result<Self, ParseError> {
         Parser::new(vex).parse_param()
     }
@@ -133,6 +143,7 @@ impl ParamValue {
         }
     }
 
+    /// Get the source Vex of this value
     pub fn source(&self) -> &str {
         &self.source
     }
@@ -150,6 +161,7 @@ impl ParamValue {
         self.kind
     }
 
+    /// Get a representation of this value as a Vex formatted string
     pub fn to_vex(&self) -> String {
         match self.kind {
             ParamValueKind::Link => format!("&{}", self.source),
@@ -157,6 +169,7 @@ impl ParamValue {
         }
     }
 
+    /// Get a representation of this value as a Vex formatted string, with unneccesary whitespace removed
     pub fn to_vex_minified(&self) -> String {
         match self.kind {
             ParamValueKind::Link => format!("&{}", self.source),
@@ -164,6 +177,7 @@ impl ParamValue {
         }
     }
 
+    /// Parse a value from a string slice
     pub fn parse(vex: &str) -> Result<Self, ParseError> {
         Parser::new(vex).parse_param_value()
     }

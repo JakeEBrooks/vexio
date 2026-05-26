@@ -7,6 +7,9 @@ use crate::parsing::Parser;
 use crate::{Block, Global, HighLevelBlock, HighLevelDef, Schedule, VexError};
 
 /// A Vex file
+///
+/// This is the top level type provided by this crate, and represents the full contents of a Vex file.
+/// A [`Vex`] can be constructed manually, or parsed from a string slice (see [`Self::parse`])
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize), derive(serde::Deserialize))]
 pub struct Vex {
@@ -38,7 +41,7 @@ impl Vex {
     }
 
     /// Open a Vex file using the provided file path
-    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, VexError> {
+    pub fn open(path: impl AsRef<Path>) -> Result<Self, VexError> {
         let mut file = std::fs::File::open(path)?;
         let mut contents = String::new();
 
@@ -89,6 +92,7 @@ impl Vex {
         self
     }
 
+    /// Get a representation of this Vex as a Vex formatted string
     pub fn to_vex(&self) -> String {
         format!(
             "{}\n{}\n{}\n{}\n{}\n{}",
@@ -101,6 +105,7 @@ impl Vex {
         )
     }
 
+    /// Get a representation of this Vex as a Vex formatted string, with unneccesary whitespace removed
     pub fn to_vex_minified(&self) -> String {
         format!(
             "{}{}{}{}{}{}",
@@ -113,8 +118,15 @@ impl Vex {
         )
     }
 
+    /// Parse a [`Vex`] from a Vex formatted string slice
     pub fn parse(vex: &str) -> Result<Self, VexError> {
         Parser::new(vex).parse()
+    }
+
+    /// Save this [`Vex`] to a file, overwriting the file at `path` if it already exists
+    pub fn save(&self, path: impl AsRef<Path>) -> Result<(), VexError> {
+        std::fs::write(path, self.to_vex())?;
+        Ok(())
     }
 }
 
@@ -140,14 +152,17 @@ impl VexVersion {
         Self { maj, min }
     }
 
+    /// Get a representation of this vex version as a Vex formatted string
     pub fn to_vex(&self) -> String {
         format!("VEX_rev = {}.{};", self.maj, self.min)
     }
 
+    /// Get a representation of this vex version as a Vex formatted string, with unneccesary whitespace removed
     pub fn to_vex_minified(&self) -> String {
         format!("VEX_rev={}.{};", self.maj, self.min)
     }
 
+    /// Parse a vex version from a string slice
     pub fn parse(vex: &str) -> Result<Self, ParseError> {
         Parser::new(vex).parse_vex_version()
     }

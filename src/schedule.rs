@@ -12,38 +12,47 @@ pub struct Schedule {
 }
 
 impl Schedule {
+    /// Create a new empty schedule
     pub fn new() -> Self {
         Self { scans: Vec::new() }
     }
 
+    /// Add a scan to this schedule
     pub fn add_scan(&mut self, scan: Scan) {
         self.scans.push(scan);
     }
 
+    /// Return an iterator over the scans in this schedule
     pub fn scans(&self) -> Iter<'_, Scan> {
         self.scans.iter()
     }
 
+    /// Return a mutable iterator over the scans in this schedule
     pub fn scans_mut(&mut self) -> IterMut<'_, Scan> {
         self.scans.iter_mut()
     }
 
+    /// View this schedule as a slice of scans
     pub fn scan_slice(&self) -> &[Scan] {
         self.scans.as_slice()
     }
 
+    /// View this schedule as a mutable slice of scans
     pub fn scan_mut_slice(&mut self) -> &mut [Scan] {
         self.scans.as_mut_slice()
     }
 
+    /// Get a representation of this schedule as a Vex formatted string
     pub fn to_vex(&self) -> String {
         format!("$SCHED;\n{}", self.scans.iter().map(|s| s.to_vex()).collect::<Vec<String>>().join("\n"))
     }
 
+    /// Get a representation of this schedule as a Vex formatted string, with unneccesary whitespace removed
     pub fn to_vex_minified(&self) -> String {
         format!("$SCHED;{}", self.scans.iter().map(|s| s.to_vex_minified()).collect::<Vec<String>>().join(""))
     }
 
+    /// Parse a schedule from a string slice
     pub fn parse(vex: &str) -> Result<Self, ParseError> {
         Parser::new(vex).parse_schedule()
     }
@@ -84,22 +93,27 @@ impl Scan {
         &self.name
     }
 
+    /// Retrieve references to all [`Param`]s with parameter names matching matching `name`.
     pub fn get(&self, name: impl AsRef<str>) -> Vec<&Param> {
         self.params.iter().filter(|p| p.name() == name.as_ref()).collect()
     }
 
+    /// Retrieve mutable references to all [`Param`]s with parameter names matching matching `name`.
     pub fn get_mut(&mut self, name: impl AsRef<str>) -> Vec<&mut Param> {
         self.params.iter_mut().filter(|p| p.name() == name.as_ref()).collect()
     }
 
+    /// Return an iterator over all the parameters in this scan
     pub fn params(&self) -> Iter<'_, Param> {
         self.params.iter()
     }
 
+    /// Return a mutable iterator over all the parameters in this scan
     pub fn params_mut(&mut self) -> IterMut<'_, Param> {
         self.params.iter_mut()
     }
 
+    /// Get a representation of this scan as a Vex formatted string
     pub fn to_vex(&self) -> String {
         format!(
             "scan {};\n{}\nendscan;\n",
@@ -108,6 +122,7 @@ impl Scan {
         )
     }
 
+    /// Get a representation of this scan as a Vex formatted string, with unneccesary whitespace removed
     pub fn to_vex_minified(&self) -> String {
         format!(
             "scan {};{}endscan;",
@@ -116,6 +131,7 @@ impl Scan {
         )
     }
 
+    /// Parse a scan from a string slice
     pub fn parse(vex: &str) -> Result<Self, ParseError> {
         Parser::new(vex).parse_scan()
     }

@@ -128,6 +128,7 @@ impl<'de> Parser<'de> {
         }
     }
 
+    /// Parse a [`VexVersion`] from the token stream
     pub fn parse_vex_version(&mut self) -> Result<VexVersion, ParseError> {
         match self.peek() {
             Some(t) => {
