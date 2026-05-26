@@ -1,6 +1,6 @@
-use crate::error::ParseError;
+use crate::error::{ParseError, VexError};
 use crate::parsing::Parser;
-use crate::{Def, HighLevelDef, VexError};
+use crate::{Def, HighLevelDef};
 use std::collections::HashMap;
 use std::collections::hash_map::{Keys, Values};
 use std::ops::Index;

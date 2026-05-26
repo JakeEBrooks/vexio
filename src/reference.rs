@@ -144,7 +144,7 @@ macro_rules! refr {
 
 #[cfg(test)]
 mod tests {
-    use crate::VexError;
+    use crate::error::VexError;
 
     use super::*;
 

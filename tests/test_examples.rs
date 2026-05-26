@@ -1,4 +1,5 @@
-use vexio::{Vex, VexError};
+use vexio::Vex;
+use vexio::error::VexError;
 
 #[test]
 fn test_vex_parse_files() -> Result<(), VexError> {

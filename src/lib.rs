@@ -6,7 +6,7 @@
 
 mod block;
 mod def;
-mod error;
+pub mod error;
 mod global;
 mod param;
 pub mod parsing;
@@ -15,7 +15,6 @@ mod schedule;
 mod vex;
 pub use block::*;
 pub use def::{Def, HighLevelDef};
-pub use error::{ParseError, VexError};
 pub use global::Global;
 pub use param::{Param, ParamValue, ParamValueKind};
 pub use reference::VexRef;

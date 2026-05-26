@@ -260,8 +260,9 @@ macro_rules! def {
 
 #[cfg(test)]
 mod tests {
+    use crate::error::VexError;
     use crate::param::{ParamValue, ParamValueKind};
-    use crate::{VexError, refr};
+    use crate::refr;
 
     use super::*;
 

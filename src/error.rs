@@ -1,3 +1,6 @@
+//! Contains the two error types provided by `vexio`, a top level error [`VexError`], and a lower level
+//! [`ParseError`] containing detailed information about the souce of a syntax error
+
 use std::fmt::Debug;
 use std::ops::Range;
 

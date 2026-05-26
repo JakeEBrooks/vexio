@@ -54,7 +54,8 @@ impl<I: Into<Vec<VexRef>>> From<I> for Global {
 
 #[cfg(test)]
 mod tests {
-    use crate::{VexError, refr};
+    use crate::error::VexError;
+    use crate::refr;
 
     use super::*;
 

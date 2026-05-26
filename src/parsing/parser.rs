@@ -1,13 +1,8 @@
 use std::collections::HashMap;
 
-use crate::def::HighLevelDef;
-use crate::error::ParseError;
-use crate::param::{ParamValue, ParamValueKind};
-use crate::parsing::token::{Token, TokenKind};
-use crate::parsing::tokenizer::Tokenizer;
-use crate::schedule::Scan;
-use crate::vex::VexVersion;
-use crate::{Block, Def, Global, HighLevelBlock, Param, Schedule, Vex, VexError, VexRef};
+use crate::error::{ParseError, VexError};
+use crate::parsing::{Token, TokenKind, Tokenizer};
+use crate::*;
 
 /// Parses Vex [`Token`]s into Vex data structures.
 pub struct Parser<'de> {

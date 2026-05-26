@@ -221,9 +221,8 @@ pub enum ParamValueKind {
 
 #[cfg(test)]
 mod tests {
-    use crate::VexError;
-
     use super::*;
+    use crate::error::VexError;
 
     #[test]
     fn test_param_macro() -> Result<(), VexError> {

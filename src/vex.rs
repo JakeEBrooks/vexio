@@ -2,9 +2,9 @@ use std::collections::HashMap;
 use std::io::{Read, Seek};
 use std::path::Path;
 
-use crate::error::ParseError;
+use crate::error::{ParseError, VexError};
 use crate::parsing::Parser;
-use crate::{Block, Global, HighLevelBlock, HighLevelDef, Schedule, VexError};
+use crate::{Block, Global, HighLevelBlock, HighLevelDef, Schedule};
 
 /// A Vex file
 ///
