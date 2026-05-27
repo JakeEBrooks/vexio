@@ -85,6 +85,7 @@ impl Param {
 ///
 /// let par1 = param!("my_parameter" = "my_value");
 /// let par2 = param!("my_parameter_2" = "my_value" : "with" : "" : "other_values");
+/// let par3 = param!("my_parameter_3" = "my_value2" : "with_some_number" : 0.1234);
 /// ```
 ///
 /// You can also use variables from the local scope:
