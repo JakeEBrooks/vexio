@@ -145,7 +145,7 @@ macro_rules! scan {
     ($name:literal; $($param_name:literal = $($param:literal):*;)+) => {
         $crate::Scan::new(
             format!($name),
-            [$( $crate::Param::new(format!($param_name), [$( $crate::ParamValue::new(format!($param)) ),*]) ),*]
+            [$( $crate::Param::new(format!($param_name), [$( $crate::ParamValue::new_ident_default(format!($param)) ),*]) ),*]
         )
     };
 }

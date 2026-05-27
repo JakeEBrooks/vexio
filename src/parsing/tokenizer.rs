@@ -282,13 +282,13 @@ pub(crate) fn is_unit(source: &str) -> bool {
     }
 }
 
-pub(crate) fn is_number_unit(source: &str) -> bool {
-    if let Some((lhs, rhs)) = source.split_once(" ") {
-        is_number(lhs) && is_unit(rhs)
-    } else {
-        false
-    }
-}
+// pub(crate) fn is_number_unit(source: &str) -> bool {
+//     if let Some((lhs, rhs)) = source.split_once(" ") {
+//         is_number(lhs) && is_unit(rhs)
+//     } else {
+//         false
+//     }
+// }
 
 pub(crate) fn is_epoch(source: &str) -> bool {
     source.chars().all(|c| matches!(c, '0'..='9' | '.' | 'y' | 'd' | 'h' | 'm' | 's'))

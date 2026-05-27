@@ -149,8 +149,8 @@ impl Def {
     ///     "param2" = "&my_link" : "64 TB";
     /// );
     /// assert_eq!(mydef.get("param1"), vec![
-    ///     &Param::new("param1", [ParamValue::new("value"), ParamValue::new("value_1")]),
-    ///     &Param::new("param1", [ParamValue::new("other_value"), ParamValue::new("value_2")]),
+    ///     &Param::new("param1", [ParamValue::from("value"), ParamValue::from("value_1")]),
+    ///     &Param::new("param1", [ParamValue::from("other_value"), ParamValue::from("value_2")]),
     /// ])
     /// ```
     pub fn get(&self, name: impl AsRef<str>) -> Vec<&Param> {
@@ -161,7 +161,7 @@ impl Def {
     ///
     /// For example:
     /// ```rust
-    /// use vexio::{def, Param, ParamValue};
+    /// use vexio::{def, Param, param, ParamValue};
     ///
     /// let mut mydef = def!("my_def_block";
     ///     "param1" = "value" : "value_1";
@@ -169,8 +169,8 @@ impl Def {
     ///     "param2" = "&my_link" : "64 TB";
     /// );
     /// assert_eq!(mydef.get_mut("param1"), vec![
-    ///     &mut Param::new("param1", [ParamValue::new("value"), ParamValue::new("value_1")]),
-    ///     &mut Param::new("param1", [ParamValue::new("other_value"), ParamValue::new("value_2")]),
+    ///     &mut param!("param1" = "value" : "value_1"),
+    ///     &mut param!("param1" = "other_value" : "value_2"),
     /// ])
     /// ```
     pub fn get_mut(&mut self, name: impl AsRef<str>) -> Vec<&mut Param> {
@@ -250,7 +250,7 @@ macro_rules! def {
     ($name:literal; $($param_name:literal = $($param:literal):*;)+) => {
         $crate::Def::new(
             format!($name),
-            [$( $crate::Param::new(format!($param_name), [$( $crate::ParamValue::new(format!($param)) ),*]) ),*]
+            [$( $crate::Param::new(format!($param_name), [$( $crate::ParamValue::new_ident_default(format!($param)) ),*]) ),*]
         )
     };
     ($name:literal) => {
