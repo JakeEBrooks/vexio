@@ -61,35 +61,30 @@ impl Vex {
     }
 
     /// Add a `GLOBAL` high level block, overwriting the current one
-    pub fn with_global(mut self, global: Global) -> Self {
+    pub fn set_global(&mut self, global: Global) {
         self.global = global;
-        self
     }
 
     /// Add a `STATION` high level block, overwriting the current one
-    pub fn with_station(mut self, defs: impl Into<Vec<HighLevelDef>>) -> Self {
+    pub fn set_station(&mut self, defs: impl Into<Vec<HighLevelDef>>) {
         self.station = HighLevelBlock::new("STATION", defs.into());
-        self
     }
 
     /// Add a `MODE` high level block, overwriting the current one
-    pub fn with_mode(mut self, defs: impl Into<Vec<HighLevelDef>>) -> Self {
+    pub fn set_mode(&mut self, defs: impl Into<Vec<HighLevelDef>>) {
         self.mode = HighLevelBlock::new("MODE", defs.into());
-        self
     }
 
     /// Add a primitive block.
     ///
     /// This will overwrite a block with the same name
-    pub fn with_block(mut self, block: Block) -> Self {
+    pub fn set_primitive(&mut self, block: Block) {
         let _ = self.primitives.insert(block.name().to_string(), block);
-        self
     }
 
     /// Add a `SCHED` block, overwriting the current one
-    pub fn with_schedule(mut self, sched: Schedule) -> Self {
+    pub fn set_schedule(&mut self, sched: Schedule) {
         self.schedule = sched;
-        self
     }
 
     /// Get a representation of this Vex as a Vex formatted string

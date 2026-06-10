@@ -1,4 +1,4 @@
-use crate::error::{ParseError, VexError};
+use crate::error::ParseError;
 use crate::parsing::Parser;
 use crate::{Def, HighLevelDef};
 use std::collections::HashMap;
@@ -39,12 +39,9 @@ impl Block {
         &self.name
     }
 
-    /// Add a [`Def`] to this [`Block`]
-    pub fn add_block(&mut self, def: Def) -> Result<(), VexError> {
-        match self.defs.insert(def.name().to_string(), def) {
-            Some(dup) => Err(VexError::DuplicateDef(dup.name().to_string())),
-            None => Ok(()),
-        }
+    /// Add a [`Def`] to this [`Block`], overwriting one with the same name if it exists
+    pub fn add_def(&mut self, def: Def) {
+        let _ = self.defs.insert(def.name().to_string(), def);
     }
 
     /// Get a reference to the [`Def`] block with name `key`, returning [`None`] if it doesn't exist
@@ -96,9 +93,9 @@ impl<T: AsRef<str>> Index<T> for Block {
 #[cfg_attr(feature = "serde", derive(serde::Serialize), derive(serde::Deserialize))]
 pub struct HighLevelBlock {
     /// The name of this high level block
-    pub name: String,
+    name: String,
     /// The [`HighLevelDef`]s within this block
-    pub defs: HashMap<String, HighLevelDef>,
+    defs: HashMap<String, HighLevelDef>,
 }
 
 impl HighLevelBlock {
@@ -171,6 +168,7 @@ impl<T: AsRef<str>> Index<T> for HighLevelBlock {
 
 #[cfg(test)]
 mod tests {
+    use crate::error::VexError;
     use crate::{def, refr};
 
     use super::*;

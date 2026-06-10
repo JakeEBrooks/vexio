@@ -1,0 +1,22 @@
+[build-system]
+requires = ["maturin>=1.9.4,<2"]
+build-backend = "maturin"
+
+[project]
+name = "vexio"
+version = "0.1.0"
+description = "The friendliest VLBI Experiment (VEX) file support library"
+readme = "README.md"
+authors = [
+    { name = "Jacob Brooks", email = "jacobbrooks312@gmail.com" }
+]
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
+module-name = "vexio._vexio"
+include = ["vexio"]

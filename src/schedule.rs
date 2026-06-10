@@ -113,6 +113,11 @@ impl Scan {
         self.params.iter_mut()
     }
 
+    /// Add a new parameter to this Scan
+    pub fn add_param(&mut self, param: Param) {
+        self.params.push(param);
+    }
+
     /// Get a representation of this scan as a Vex formatted string
     pub fn to_vex(&self) -> String {
         format!(

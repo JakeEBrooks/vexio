@@ -1,0 +1,12 @@
+[package]
+name = "vexio-py"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "vexio"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = "*"
+vexio = { path = "../", default-features = false }

@@ -18,12 +18,9 @@ enddef;
 
 The intent of the file is to comprehensively document and describe a particular experiment in an observatory-agnostic way. This makes it easier for observatories to cooperate since they are working from a mutually understood observation plan. And, when the observation is done, the Vex file can be archived so that both observatories can document a complete history of their observations.
 
-## Issues
-Historically, the biggest issue faced by users working with Vex files is the lack of software support. If openly available at all, Vex software is unlikely to be user-friendly and finding a single character syntax error at line 893 and column 11, for example, can be extremely difficult. The consequence of this, in addition to generating headaches for observatory staff, is a reduced uptake of the Vex style of doing things which hurts collaboration between observatories.
-
 ## `vexio` features
 
-This library seeks to solve these historical problems by providing a premium experience for users of Vex in radio astronomy (like myself). 
+This library seeks to solve many of the historical problems of using Vex by providing a premium experience for users of Vex in radio astronomy (like myself). 
 
 ### Error Messages!
 
@@ -61,6 +58,9 @@ let refr = refr!("MYBLOCK" = "keyword" : "qual1" : "qual2");
 
 ### Permissive Parsing
 `vexio` does not take an opinion on whether your vex file contains valid Vex, only that it is written using Vex syntax. This may change in the future, but for now it seems that the Vex specification (outside of the syntax) is only loosely enforced, so the software follows this trend. For you, this means that you can create an entirely new undefined primitive block and write your Vex file normally. You can then send this to someone else using `vexio` which will parse that undefined block as a normal primitive block.
+
+### Python bindings
+Python bindings to `vexio` can be found under [`py/`](./py)
 
 ## Contributing
 

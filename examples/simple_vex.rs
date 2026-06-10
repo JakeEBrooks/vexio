@@ -85,16 +85,16 @@ fn main() -> Result<(), VexError> {
     ]
     .into();
 
-    let vex = Vex::new()
-        .with_global(global)
-        .with_station(station)
-        .with_mode(mode)
-        .with_block(antenna)
-        .with_schedule(sched)
-        .to_vex();
+    let mut vex = Vex::new();
+    vex.set_global(global);
+    vex.set_station(station);
+    vex.set_mode(mode);
+    vex.set_primitive(antenna);
+    vex.set_schedule(sched);
 
-    print!("{}", vex);
+    let vexstr = vex.to_vex();
+    print!("{}", vexstr);
 
-    let _parsed_vex = Vex::parse(&vex)?;
+    let _parsed_vex = Vex::parse(&vexstr)?;
     Ok(())
 }

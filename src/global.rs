@@ -1,3 +1,5 @@
+use std::slice::{Iter, IterMut};
+
 use crate::VexRef;
 use crate::error::ParseError;
 use crate::parsing::Parser;
@@ -28,6 +30,46 @@ impl Global {
     /// View this global block as a mutable slice of references
     pub fn as_mut_slice(&mut self) -> &mut [VexRef] {
         self.refs.as_mut_slice()
+    }
+
+    /// Retrieve references to all [`VexRef`]s with block names matching matching `blk`.
+    ///
+    /// For example:
+    /// ```rust
+    /// use vexio::{refr, Global};
+    ///
+    /// let mut global = Global::new();
+    /// global.add_ref(refr!("BLK1" = "my_key2"));
+    /// global.add_ref(refr!("BLK2" = "key2" : "qual1"));
+    /// assert_eq!(global.get("BLK1"), vec![&refr!("BLK1" = "my_key2")])
+    /// ```
+    pub fn get(&self, blk: impl AsRef<str>) -> Vec<&VexRef> {
+        self.refs.iter().filter(|r| r.blockname() == blk.as_ref()).collect()
+    }
+
+    /// Retrieve mutable references to all [`VexRef`]s with block names matching matching `blk`.
+    ///
+    /// For example:
+    /// ```rust
+    /// use vexio::{refr, Global};
+    ///
+    /// let mut global = Global::new();
+    /// global.add_ref(refr!("BLK1" = "my_key2"));
+    /// global.add_ref(refr!("BLK2" = "key2" : "qual1"));
+    /// assert_eq!(global.get_mut("BLK1"), vec![&mut refr!("BLK1" = "my_key2")])
+    /// ```
+    pub fn get_mut(&mut self, blk: impl AsRef<str>) -> Vec<&mut VexRef> {
+        self.refs.iter_mut().filter(|r| r.blockname() == blk.as_ref()).collect()
+    }
+
+    /// Return an iterator over all [`VexRef`]s in this [`Global`].
+    pub fn refs(&self) -> Iter<'_, VexRef> {
+        self.refs.iter()
+    }
+
+    /// Return an iterator of mutable references over all [`VexRef`]s in this [`Global`].
+    pub fn refs_mut(&mut self) -> IterMut<'_, VexRef> {
+        self.refs.iter_mut()
     }
 
     /// Get a representation of this global block as a Vex formatted string

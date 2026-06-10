@@ -17,3 +17,6 @@ serde = { version = "1", features = ["derive"], optional = true }
 default = ["serde"]
 serde = ["dep:serde"]
 miette = ["dep:miette"]
+
+[workspace]
+members = [".", "py"]
