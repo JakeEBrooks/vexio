@@ -187,6 +187,11 @@ impl Def {
         self.params.iter_mut()
     }
 
+    /// Add a new parameter to this Def
+    pub fn add_param(&mut self, param: Param) {
+        self.params.push(param);
+    }
+
     /// Return a Vex formatted string representing this structure
     pub fn to_vex(&self) -> String {
         format!(
