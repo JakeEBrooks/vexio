@@ -114,7 +114,7 @@ impl<'de> Iterator for Tokenizer<'de> {
                 // A comment starts with a asterisk (*)
                 StartsWith::Asterisk => {
                     let first_newline = c_onwards[1..].find('\n').unwrap_or(c_onwards.len() - 1);
-                    let comment = &c_onwards[..first_newline];
+                    let comment = &c_onwards[..first_newline + 1];
                     self.byte += comment.len();
                     self.rest = &self.rest[comment.len()..];
 
