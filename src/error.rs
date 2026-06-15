@@ -68,7 +68,7 @@ impl Diagnostic for VexError {
 /// If the crate feature `miette` is enabled, ParseError implements [`miette::Diagnostic`] and can be used to print
 /// detailed error messages to the terminal for user facing applications
 #[derive(Debug, Error)]
-#[error("Failed to parse Vex: {desc}")]
+#[error("Failed to parse Vex at line {line}, column {col}: {desc}")]
 pub struct ParseError {
     desc: String,
     src: String,
