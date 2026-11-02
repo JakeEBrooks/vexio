@@ -1,6 +1,6 @@
 [package]
 name = "vexio"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Jacob Brooks <jacobbrooks312@gmail.com>"]
 description = "The friendliest VLBI Experiment (VEX) file support library"
 repository = "https://github.com/JakeEBrooks/vexio"
