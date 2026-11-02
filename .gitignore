@@ -1,2 +1,7 @@
-/target
+target
 Cargo.lock
+
+# Python files/directories
+.venv
+*.so
+__pycache__

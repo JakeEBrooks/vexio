@@ -3,7 +3,6 @@ name = "vexio"
 version = "0.1.0"
 authors = ["Jacob Brooks <jacobbrooks312@gmail.com>"]
 description = "The friendliest VLBI Experiment (VEX) file support library"
-homepage = "https://github.com/JakeEBrooks/vexio"
 repository = "https://github.com/JakeEBrooks/vexio"
 keywords = ["parser", "parsing", "text", "file", "io", "science"]
 edition = "2024"
@@ -14,7 +13,6 @@ miette = { version = "7", optional = true }
 serde = { version = "1", features = ["derive"], optional = true }
 
 [features]
-default = ["serde"]
 serde = ["dep:serde"]
 miette = ["dep:miette"]
 

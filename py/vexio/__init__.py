@@ -1,29 +1,23 @@
+"""Python bindings to vexio for parsing, creating, and editing VEX documents."""
+
 from ._vexio import (
     Block,
-    Def,
+    BlockDef,
+    BlockKind,
     Global,
-    HighLevelBlock,
-    HighLevelDef,
-    Param,
-    ParamValue,
-    ParamValueKind,
-    Scan,
-    Schedule,
     Vex,
-    VexRef,
+    VexValue,
+    VexValueKind,
+    VexVersion,
 )
 
 __all__ = [
-    "Vex",
-    "Param",
-    "ParamValue",
-    "ParamValueKind",
-    "VexRef",
-    "Def",
-    "Global",
-    "HighLevelDef",
-    "HighLevelBlock",
     "Block",
-    "Scan",
-    "Schedule",
+    "BlockDef",
+    "BlockKind",
+    "Global",
+    "Vex",
+    "VexValue",
+    "VexValueKind",
+    "VexVersion",
 ]

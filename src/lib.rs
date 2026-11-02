@@ -2,47 +2,61 @@
 //!
 //! For examples on how to use this library, see the `examples/` directory in the crate source.
 
-#![warn(missing_docs)]
+// #![warn(missing_docs)]
 
 mod block;
-mod def;
-pub mod error;
+mod error;
 mod global;
-mod param;
-pub mod parsing;
-mod reference;
-mod schedule;
+mod parsing;
+mod value;
 mod vex;
-pub use block::*;
-pub use def::{Def, HighLevelDef};
+
+pub use block::{Block, BlockDef, BlockKind};
+pub use error::{ParseError, ParseErrorKind, VexError};
 pub use global::Global;
-pub use param::{Param, ParamValue, ParamValueKind};
-pub use reference::VexRef;
-pub use schedule::{Scan, Schedule};
+pub use value::{VexValue, VexValueKind};
 pub use vex::{Vex, VexVersion};
 
-/// Valid high level Vex blocks
-pub const HIGH_LEVEL_BLOCKS: [&str; 3] = ["GLOBAL", "STATION", "MODE"];
+use std::iter::Peekable;
 
-/// Valid primitive Vex blocks
-pub const PRIMITIVE_BLOCKS: [&str; 19] = [
-    "ANTENNA",
-    "BBC",
-    "BITSTREAMS",
-    "CLOCK",
-    "DAS",
-    "DATASTREAMS",
-    "EOP",
-    "EXPER",
-    "EXTENSIONS",
-    "FREQ",
-    "PHASE_CAL_DETECT",
-    "IF",
-    "SEFD",
-    "SITE",
-    "SCHEDULING_PARAMS",
-    "SOURCE",
-    "PROCEDURES",
-    "TRACKS",
-    "TAPELOG_OBS",
-];
+pub(crate) struct IntersperseIterator<I>
+where
+    I: Iterator,
+    I::Item: Clone,
+{
+    inner: Peekable<I>,
+    index: usize,
+    separator: I::Item,
+}
+
+impl<I> IntersperseIterator<I>
+where
+    I: Iterator,
+    I::Item: Clone,
+{
+    fn new(iter: I, separator: I::Item) -> Self {
+        Self {
+            inner: iter.peekable(),
+            index: 0,
+            separator,
+        }
+    }
+}
+
+impl<I> Iterator for IntersperseIterator<I>
+where
+    I: Iterator,
+    I::Item: Clone,
+{
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index % 2 == 1 && self.inner.peek().is_some() {
+            self.index += 1;
+            Some(self.separator.clone())
+        } else {
+            self.index += 1;
+            self.inner.next()
+        }
+    }
+}

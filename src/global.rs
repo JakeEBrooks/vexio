@@ -1,110 +1,121 @@
-use std::slice::{Iter, IterMut};
-
-use crate::VexRef;
 use crate::error::ParseError;
 use crate::parsing::Parser;
+use crate::value::VexValue;
+use std::collections::HashMap;
+use std::collections::hash_map::{Iter, IterMut};
+use std::fmt::Display;
+use std::ops::{Index, IndexMut};
+use std::str::FromStr;
 
 /// Represents the unique `GLOBAL` block within a Vex file.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize), derive(serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
+)]
 pub struct Global {
-    refs: Vec<VexRef>,
+    refs: HashMap<String, VexValue>,
 }
 
 impl Global {
-    /// Make a new, empty, Global block
+    /// Make a new, empty, GLOBAL block
     pub fn new() -> Self {
-        Self { refs: Vec::new() }
+        Self {
+            refs: HashMap::new(),
+        }
     }
 
-    /// Add a [`VexRef`] to this global block
-    pub fn add_ref(&mut self, refr: VexRef) {
-        self.refs.push(refr);
+    /// Inserts a reference, returning any previous value stored under the same key.
+    pub fn add(&mut self, key: impl AsRef<str>, value: VexValue) -> Option<VexValue> {
+        self.refs.insert(key.as_ref().to_string(), value)
     }
 
-    /// View this global block as a slice of references
-    pub fn as_slice(&self) -> &[VexRef] {
-        self.refs.as_slice()
+    /// Returns the reference value for `key`, if present.
+    pub fn get(&self, key: impl AsRef<str>) -> Option<&VexValue> {
+        self.refs.get(key.as_ref())
     }
 
-    /// View this global block as a mutable slice of references
-    pub fn as_mut_slice(&mut self) -> &mut [VexRef] {
-        self.refs.as_mut_slice()
+    /// Returns mutable access to the reference value for `key`, if present.
+    pub fn get_mut(&mut self, key: impl AsRef<str>) -> Option<&mut VexValue> {
+        self.refs.get_mut(key.as_ref())
     }
 
-    /// Retrieve references to all [`VexRef`]s with block names matching matching `blk`.
-    ///
-    /// For example:
-    /// ```rust
-    /// use vexio::{refr, Global};
-    ///
-    /// let mut global = Global::new();
-    /// global.add_ref(refr!("BLK1" = "my_key2"));
-    /// global.add_ref(refr!("BLK2" = "key2" : "qual1"));
-    /// assert_eq!(global.get("BLK1"), vec![&refr!("BLK1" = "my_key2")])
-    /// ```
-    pub fn get(&self, blk: impl AsRef<str>) -> Vec<&VexRef> {
-        self.refs.iter().filter(|r| r.blockname() == blk.as_ref()).collect()
+    /// Removes and returns the reference value for `key`, if present.
+    pub fn remove(&mut self, key: impl AsRef<str>) -> Option<VexValue> {
+        self.refs.remove(key.as_ref())
     }
 
-    /// Retrieve mutable references to all [`VexRef`]s with block names matching matching `blk`.
-    ///
-    /// For example:
-    /// ```rust
-    /// use vexio::{refr, Global};
-    ///
-    /// let mut global = Global::new();
-    /// global.add_ref(refr!("BLK1" = "my_key2"));
-    /// global.add_ref(refr!("BLK2" = "key2" : "qual1"));
-    /// assert_eq!(global.get_mut("BLK1"), vec![&mut refr!("BLK1" = "my_key2")])
-    /// ```
-    pub fn get_mut(&mut self, blk: impl AsRef<str>) -> Vec<&mut VexRef> {
-        self.refs.iter_mut().filter(|r| r.blockname() == blk.as_ref()).collect()
+    /// Returns whether a reference with `key` is present.
+    pub fn contains_key(&self, key: impl AsRef<str>) -> bool {
+        self.refs.contains_key(key.as_ref())
     }
 
-    /// Return an iterator over all [`VexRef`]s in this [`Global`].
-    pub fn refs(&self) -> Iter<'_, VexRef> {
+    /// Iterates over references as `(key, value)` pairs.
+    pub fn iter(&self) -> Iter<'_, String, VexValue> {
         self.refs.iter()
     }
 
-    /// Return an iterator of mutable references over all [`VexRef`]s in this [`Global`].
-    pub fn refs_mut(&mut self) -> IterMut<'_, VexRef> {
+    /// Mutably iterates over references as `(key, value)` pairs.
+    pub fn iter_mut(&mut self) -> IterMut<'_, String, VexValue> {
         self.refs.iter_mut()
     }
 
-    /// Get a representation of this global block as a Vex formatted string
-    pub fn to_vex(&self) -> String {
-        format!("$GLOBAL;\n{}\n", self.refs.iter().map(|r| format!("\t{}", r.to_vex())).collect::<Vec<String>>().join("\n"))
-    }
-
-    /// Get a representation of this global block as a Vex formatted string, with unneccesary whitespace removed
-    pub fn to_vex_minified(&self) -> String {
-        format!("$GLOBAL;{}", self.refs.iter().map(|r| r.to_vex_minified()).collect::<Vec<String>>().join(""))
-    }
-
-    /// Parse a [`Global`] block from a string slice
-    pub fn parse(vex: &str) -> Result<Self, ParseError> {
-        Parser::new(vex).parse_global()
+    fn to_vex(&self) -> String {
+        format!(
+            "$GLOBAL;{}\n",
+            self.refs
+                .iter()
+                .map(|(k, v)| format!("\n\tref ${} = {};", k.to_uppercase(), v))
+                .collect::<String>()
+        )
     }
 }
 
-impl<I: Into<Vec<VexRef>>> From<I> for Global {
-    fn from(value: I) -> Self {
-        Self { refs: value.into() }
+impl Display for Global {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_vex())
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use crate::error::VexError;
-    use crate::refr;
+impl FromStr for Global {
+    type Err = ParseError;
 
-    use super::*;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Parser::new(s)?.parse_global()
+    }
+}
 
-    #[test]
-    fn test_parse_tofrom_global() -> Result<(), VexError> {
-        let start = Global::from([refr!("MY_BLOCK" = "some_key" : "qual1"), refr!("MY_BLOCK2" = "some_key2")]);
-        assert_eq!(start, Global::parse(start.to_vex().as_str())?);
-        Ok(())
+impl<I: AsRef<str>> Index<I> for Global {
+    type Output = VexValue;
+
+    fn index(&self, index: I) -> &Self::Output {
+        self.get(index.as_ref())
+            .unwrap_or_else(|| panic!("Entry '{}' does not exist in GLOBAL", index.as_ref()))
+    }
+}
+
+impl<I: AsRef<str>> IndexMut<I> for Global {
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        self.get_mut(index.as_ref())
+            .unwrap_or_else(|| panic!("Entry '{}' does not exist in GLOBAL", index.as_ref()))
+    }
+}
+
+impl<'a> IntoIterator for &'a Global {
+    type Item = (&'a String, &'a VexValue);
+    type IntoIter = Iter<'a, String, VexValue>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut Global {
+    type Item = (&'a String, &'a mut VexValue);
+    type IntoIter = IterMut<'a, String, VexValue>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter_mut()
     }
 }

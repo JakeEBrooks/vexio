@@ -1,742 +1,807 @@
-use pyo3::exceptions::{PyOSError, PyValueError};
+use std::str::FromStr;
+
+use pyo3::exceptions::{PyKeyError, PyOSError, PyValueError};
 use pyo3::prelude::*;
-use std::convert::From;
-use vexio::error::VexError;
-use vexio::{Block, Def, Global, HighLevelBlock, HighLevelDef, Param, ParamValue, ParamValueKind, Scan, Schedule, Vex, VexRef};
+use vexio::{
+    Block as RustBlock, BlockDef as RustBlockDef, BlockKind as RustBlockKind, Global as RustGlobal,
+    ParseError, Vex as RustVex, VexError, VexValue as RustVexValue,
+    VexValueKind as RustVexValueKind, VexVersion as RustVexVersion,
+};
 
-/// `vexio` is a library for parsing, modifying, and creating Very Long Baseline Interferometry (VLBI) Experiment files, or VEX files, commonly used for describing radio astronomy VLBI experiments.
-///
-/// For examples on how to use this library, see the `examples/` directory in the library source.
-#[pymodule(name = "_vexio")]
-fn my_module(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<PyVex>()?;
-    m.add_class::<PyParam>()?;
-    m.add_class::<PyParamValue>()?;
-    m.add_class::<PyParamValueKind>()?;
-    m.add_class::<PyVexRef>()?;
-    m.add_class::<PyDef>()?;
-    m.add_class::<PyGlobal>()?;
-    m.add_class::<PyHighLevelDef>()?;
-    m.add_class::<PyHighLevelBlock>()?;
-    m.add_class::<PyBlock>()?;
-    m.add_class::<PyScan>()?;
-    m.add_class::<PySchedule>()?;
-    Ok(())
+fn parse_error(error: ParseError) -> PyErr {
+    PyValueError::new_err(error.to_string())
 }
 
-#[pyclass(name = "Vex")]
-/// A Vex file.
-///
-/// This is the top level type provided by this crate, and represents the full
-/// contents of a Vex file. A ``Vex`` can be constructed manually, or parsed
-/// from a string slice (see :meth:`parse`).
-struct PyVex {
-    inner: Vex,
-}
-
-#[pymethods]
-impl PyVex {
-    /// Construct an empty ``Vex``.
-    #[new]
-    fn new() -> Self {
-        PyVex { inner: Vex::new() }
-    }
-
-    /// Open a Vex file using the provided file path.
-    #[staticmethod]
-    fn open(path: String) -> Result<Self, PyVexError> {
-        let vex = Vex::open(path)?;
-        Ok(Self { inner: vex })
-    }
-
-    /// Get a representation of this Vex as a Vex formatted string.
-    fn to_vex(&self) -> String {
-        self.inner.to_vex()
-    }
-
-    /// Get a representation of this Vex as a Vex formatted string, with
-    /// unneccesary whitespace removed.
-    fn to_vex_minified(&self) -> String {
-        self.inner.to_vex_minified()
-    }
-
-    /// Parse a ``Vex`` from a Vex formatted string slice.
-    #[staticmethod]
-    fn parse(vex: &str) -> Result<Self, PyVexError> {
-        let parsed = Vex::parse(vex)?;
-        Ok(Self { inner: parsed })
-    }
-
-    /// Save this ``Vex`` to a file, overwriting the file at ``path`` if it
-    /// already exists.
-    fn save(&self, path: String) -> Result<(), PyVexError> {
-        self.inner.save(path)?;
-        Ok(())
-    }
-
-    /// Get the VEX_rev version of this Vex file.
-    fn version(&self) -> (usize, usize) {
-        (self.inner.rev.maj as usize, self.inner.rev.min as usize)
-    }
-
-    /// Set the VEX_rev version of this Vex file.
-    fn set_version(&mut self, maj: usize, min: usize) {
-        self.inner.rev = vexio::VexVersion { maj: maj as u8, min: min as u8 }
-    }
-
-    /// Add a `GLOBAL` high level block, overwriting the current one
-    fn set_global(&mut self, global: &PyGlobal) {
-        self.inner.set_global(global.inner.clone());
-    }
-
-    /// Add a `STATION` high level block, overwriting the current one
-    fn set_station(&mut self, station: &PyHighLevelBlock) {
-        self.inner.set_station(station.inner.defs().cloned().collect::<Vec<HighLevelDef>>());
-    }
-
-    /// Add a `MODE` high level block, overwriting the current one
-    fn set_mode(&mut self, mode: &PyHighLevelBlock) {
-        self.inner.set_mode(mode.inner.defs().cloned().collect::<Vec<HighLevelDef>>());
-    }
-
-    /// Add a primitive block (e.g. $EOP), overwriting the current one
-    fn set_primitive(&mut self, primitive: &PyBlock) {
-        self.inner.set_primitive(primitive.inner.clone());
-    }
-
-    /// Add a `SCHED` block, overwriting the current one
-    fn set_schedule(&mut self, schedule: &PySchedule) {
-        self.inner.set_schedule(schedule.inner.clone());
+fn vex_error(error: VexError) -> PyErr {
+    match error {
+        VexError::IoError(error) => PyOSError::new_err(error.to_string()),
+        VexError::ParseError(error) => parse_error(error),
     }
 }
 
-struct PyVexError(VexError);
+fn wrap_value(py: Python<'_>, value: RustVexValue) -> PyResult<Py<PyVexValue>> {
+    Py::new(py, PyVexValue { inner: value })
+}
 
-impl From<PyVexError> for PyErr {
-    fn from(value: PyVexError) -> Self {
-        match value.0 {
-            VexError::IoError(e) => PyOSError::new_err(e.to_string()),
-            VexError::ParseError(e) => PyValueError::new_err(e.description().to_string()),
-            VexError::DuplicateBlock(e) => PyValueError::new_err(e),
-            VexError::DuplicateDef(e) => PyValueError::new_err(e),
-            VexError::MissingBlock(e) => PyValueError::new_err(e),
-            VexError::MissingVexRev => PyValueError::new_err(value.0.to_string()),
+fn wrap_values(py: Python<'_>, values: Vec<RustVexValue>) -> PyResult<Vec<Py<PyVexValue>>> {
+    values
+        .into_iter()
+        .map(|value| wrap_value(py, value))
+        .collect()
+}
+
+fn clone_values(py: Python<'_>, values: Vec<Py<PyVexValue>>) -> Vec<RustVexValue> {
+    values
+        .into_iter()
+        .map(|value| value.borrow(py).inner.clone())
+        .collect()
+}
+
+#[pyclass(name = "BlockKind", eq, eq_int)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PyBlockKind {
+    HighLevel,
+    Primitive,
+    Schedule,
+}
+
+impl From<PyBlockKind> for RustBlockKind {
+    fn from(kind: PyBlockKind) -> Self {
+        match kind {
+            PyBlockKind::HighLevel => Self::HighLevel,
+            PyBlockKind::Primitive => Self::Primitive,
+            PyBlockKind::Schedule => Self::Schedule,
         }
     }
 }
 
-impl From<VexError> for PyVexError {
-    fn from(value: VexError) -> Self {
-        Self(value)
-    }
-}
-
-#[pyclass(name = "Param")]
-/// A Vex parameter.
-struct PyParam {
-    inner: Param,
-}
-
-#[pymethods]
-impl PyParam {
-    /// Construct a new ``Param`` from a name and a series of values.
-    #[new]
-    fn new(name: String, values: Vec<String>) -> Self {
-        Self { inner: Param::new(name, values) }
-    }
-
-    /// Construct a new parameter with no values.
-    #[staticmethod]
-    fn new_empty(name: String) -> Self {
-        Self { inner: Param::new_empty(name) }
-    }
-
-    /// Get the name of this parameter.
-    fn name(&self) -> String {
-        self.inner.name().to_string()
-    }
-
-    /// Add a value to this parameter.
-    fn add_value<'py>(&mut self, value: &Bound<'py, PyAny>) {
-        // Convert whatever it was to a string and attempt to parse it
-        self.inner.add_value(value.extract::<String>().unwrap_or("UNKNOWN_VALUE".to_string()));
-    }
-
-    /// Return an iterator over the values of this parameter.
-    fn values(&self) -> Vec<String> {
-        self.inner.values().map(|v| v.source().to_string()).collect()
-    }
-
-    /// Get a representation of this parameter as a Vex formatted string.
-    fn to_vex(&self) -> String {
-        self.inner.to_vex()
-    }
-
-    /// Get a representation of this parameter as a Vex formatted string, with
-    /// unneccesary whitespace removed.
-    fn to_vex_minified(&self) -> String {
-        self.inner.to_vex_minified()
-    }
-
-    /// Parse a Vex parameter from a string slice.
-    #[staticmethod]
-    fn parse(vex: &str) -> Result<Self, PyVexError> {
-        let parsed = Param::parse(vex).map_err(VexError::from)?;
-        Ok(Self { inner: parsed })
-    }
-}
-
-#[pyclass(name = "ParamValue")]
-/// A single value of a defined Vex ``Param``.
-///
-/// Parameter values are contained in a colon separated list in the Vex format.
-struct PyParamValue {
-    inner: ParamValue,
-}
-
-#[pymethods]
-impl PyParamValue {
-    /// Get the source Vex of this value.
-    fn source(&self) -> String {
-        self.inner.source().to_string()
-    }
-
-    /// Return the ``ParamValueKind`` of this ``ParamValue``.
-    fn kind(&self) -> PyParamValueKind {
-        PyParamValueKind::from(self.inner.kind())
-    }
-
-    /// Get a representation of this value as a Vex formatted string.
-    fn to_vex(&self) -> String {
-        self.inner.to_vex()
-    }
-
-    /// Get a representation of this value as a Vex formatted string, with
-    /// unneccesary whitespace removed.
-    fn to_vex_minified(&self) -> String {
-        self.inner.to_vex_minified()
-    }
-
-    /// Parse a value from a string slice.
-    #[staticmethod]
-    fn parse(vex: &str) -> Result<Self, PyVexError> {
-        match ParamValue::parse(vex) {
-            Ok(parsed) => Ok(PyParamValue { inner: parsed }),
-            Err(e) => Err(PyVexError(VexError::ParseError(e))),
+impl From<RustBlockKind> for PyBlockKind {
+    fn from(kind: RustBlockKind) -> Self {
+        match kind {
+            RustBlockKind::HighLevel => Self::HighLevel,
+            RustBlockKind::Primitive => Self::Primitive,
+            RustBlockKind::Schedule => Self::Schedule,
         }
     }
 }
 
-#[pyclass(name = "ParamValueKind")]
-/// The type of a particular ``ParamValue``.
-enum PyParamValueKind {
+#[pyclass(name = "VexValueKind", eq, eq_int)]
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PyVexValueKind {
     Number,
     NumberUnit,
     Ident,
     Literal,
     Epoch,
-    Coord,
+    RightAscension,
+    Declination,
     Link,
     Empty,
 }
 
-impl From<ParamValueKind> for PyParamValueKind {
-    fn from(value: ParamValueKind) -> Self {
-        match value {
-            ParamValueKind::Coord => PyParamValueKind::Coord,
-            ParamValueKind::Empty => PyParamValueKind::Empty,
-            ParamValueKind::Epoch => PyParamValueKind::Epoch,
-            ParamValueKind::Ident => PyParamValueKind::Ident,
-            ParamValueKind::Link => PyParamValueKind::Link,
-            ParamValueKind::Literal => PyParamValueKind::Literal,
-            ParamValueKind::Number => PyParamValueKind::Number,
-            ParamValueKind::NumberUnit => PyParamValueKind::NumberUnit,
+impl From<PyVexValueKind> for RustVexValueKind {
+    fn from(kind: PyVexValueKind) -> Self {
+        match kind {
+            PyVexValueKind::Number => Self::Number,
+            PyVexValueKind::NumberUnit => Self::NumberUnit,
+            PyVexValueKind::Ident => Self::Ident,
+            PyVexValueKind::Literal => Self::Literal,
+            PyVexValueKind::Epoch => Self::Epoch,
+            PyVexValueKind::RightAscension => Self::RightAscension,
+            PyVexValueKind::Declination => Self::Declination,
+            PyVexValueKind::Link => Self::Link,
+            PyVexValueKind::Empty => Self::Empty,
         }
     }
 }
 
-#[pyclass(name = "VexRef")]
-/// A Vex `ref` declaration.
-struct PyVexRef {
-    inner: VexRef,
-}
-
-#[pymethods]
-impl PyVexRef {
-    /// Construct a new ``VexRef`` from a ``blockname`` and a ``keyword``
-    /// (the name of a ``Def`` within ``blockname``).
-    #[new]
-    fn new(blockname: String, keyword: String) -> Self {
-        Self {
-            inner: VexRef::new(blockname, keyword),
-        }
-    }
-
-    /// Construct a new ``VexRef`` from a ``blockname``, a ``keyword``
-    /// (the name of a ``Def`` within ``blockname``), and a series of qualifiers.
-    #[staticmethod]
-    fn new_with_quals(blockname: String, keyword: String, qualifiers: Vec<String>) -> Self {
-        Self {
-            inner: VexRef::new_with_quals(blockname, keyword, qualifiers),
-        }
-    }
-
-    /// Get the blockname referenced by this ref.
-    #[getter]
-    fn blockname(&self) -> String {
-        self.inner.blockname().to_string()
-    }
-
-    /// Get the def block referenced by this ref.
-    #[getter]
-    fn defname(&self) -> String {
-        self.inner.defname().to_string()
-    }
-
-    /// Get an iterator over the qualifiers in this reference.
-    #[getter]
-    fn qualifiers(&self) -> Vec<String> {
-        self.inner.quals().cloned().collect()
-    }
-
-    /// Add a qualifier to this reference.
-    fn add_quals(&mut self, qual: String) {
-        self.inner.add_quals(qual);
-    }
-
-    /// Get a representation of this reference as a Vex formatted string.
-    fn to_vex(&self) -> String {
-        self.inner.to_vex()
-    }
-
-    /// Get a representation of this reference as a Vex formatted string,
-    /// with unneccesary whitespace removed.
-    fn to_vex_minified(&self) -> String {
-        self.inner.to_vex_minified()
-    }
-
-    /// Parse a ``VexRef`` from a string slice.
-    #[staticmethod]
-    fn parse(vex: &str) -> Result<Self, PyVexError> {
-        match VexRef::parse(vex) {
-            Ok(parsed) => Ok(PyVexRef { inner: parsed }),
-            Err(e) => Err(PyVexError(VexError::ParseError(e))),
+impl From<RustVexValueKind> for PyVexValueKind {
+    fn from(kind: RustVexValueKind) -> Self {
+        match kind {
+            RustVexValueKind::Number => Self::Number,
+            RustVexValueKind::NumberUnit => Self::NumberUnit,
+            RustVexValueKind::Ident => Self::Ident,
+            RustVexValueKind::Literal => Self::Literal,
+            RustVexValueKind::Epoch => Self::Epoch,
+            RustVexValueKind::RightAscension => Self::RightAscension,
+            RustVexValueKind::Declination => Self::Declination,
+            RustVexValueKind::Link => Self::Link,
+            RustVexValueKind::Empty => Self::Empty,
         }
     }
 }
 
-#[pyclass(name = "Def")]
-/// A `def` block within a primitive Vex block.
-struct PyDef {
-    inner: Def,
+#[pyclass(name = "VexValue")]
+#[derive(Clone)]
+struct PyVexValue {
+    inner: RustVexValue,
 }
 
 #[pymethods]
-impl PyDef {
-    /// Construct a new ``Def`` block from a name and a series of ``Param``s.
+impl PyVexValue {
     #[new]
-    fn new(name: String) -> Self {
-        Self { inner: Def::new_empty(name) }
-    }
-
-    /// Get the name of this def block.
-    #[getter]
-    fn name(&self) -> String {
-        self.inner.name().to_string()
-    }
-
-    /// Add a new parameter to this ``Def``.
-    fn add_param(&mut self, param: &PyParam) {
-        self.inner.add_param(param.inner.clone());
-    }
-
-    /// Retrieve all ``Param``s with parameter names matching ``name``.
-    fn get_param(&self, name: String) -> Option<PyParam> {
-        self.inner.get(&name).first().map(|p| PyParam { inner: (*p).clone() })
-    }
-
-    /// Retrieve all ``Param``s with parameter names matching ``name``.
-    fn get_params(&self, name: String) -> Vec<PyParam> {
-        self.inner.get(&name).into_iter().map(|p| PyParam { inner: (*p).clone() }).collect()
-    }
-
-    /// Return an iterator over the names of parameters in this def.
-    fn param_names(&self) -> Vec<String> {
-        self.inner.params().map(|p| p.name().to_string()).collect()
-    }
-
-    /// Return an iterator over the ``Param``s in this def.
-    fn params(&self) -> Vec<PyParam> {
-        self.inner.params().cloned().map(|p| PyParam { inner: p }).collect()
-    }
-
-    /// Return a Vex formatted string representing this structure.
-    fn to_vex(&self) -> String {
-        self.inner.to_vex()
-    }
-
-    /// Return a Vex formatted string representing this structure,
-    /// with unnecessary whitespace removed.
-    fn to_vex_minified(&self) -> String {
-        self.inner.to_vex_minified()
-    }
-
-    /// Attempt to parse a ``Def`` from a Vex formatted string.
-    #[staticmethod]
-    fn parse(vex: &str) -> Result<Self, PyVexError> {
-        match Def::parse(vex) {
-            Ok(parsed) => Ok(PyDef { inner: parsed }),
-            Err(e) => Err(PyVexError(VexError::ParseError(e))),
+    #[pyo3(signature = (source, kind, unit=None))]
+    fn new(source: String, kind: PyRef<'_, PyVexValueKind>, unit: Option<String>) -> Self {
+        Self {
+            inner: RustVexValue::new(source, unit, (*kind).into()),
         }
+    }
+
+    #[staticmethod]
+    fn number(value: f64) -> Self {
+        Self {
+            inner: RustVexValue::new_float(value),
+        }
+    }
+
+    #[staticmethod]
+    fn integer(value: i64) -> Self {
+        Self {
+            inner: RustVexValue::new_integer(value),
+        }
+    }
+
+    #[staticmethod]
+    fn number_with_unit(value: f64, unit: &str) -> Self {
+        Self {
+            inner: RustVexValue::new_float_unit(value, unit),
+        }
+    }
+
+    #[staticmethod]
+    fn integer_with_unit(value: i64, unit: &str) -> Self {
+        Self {
+            inner: RustVexValue::new_integer_unit(value, unit),
+        }
+    }
+
+    #[staticmethod]
+    fn ident(source: &str) -> Self {
+        Self {
+            inner: RustVexValue::new_ident(source),
+        }
+    }
+
+    #[staticmethod]
+    fn literal(source: &str) -> Self {
+        Self {
+            inner: RustVexValue::new_literal(source),
+        }
+    }
+
+    #[staticmethod]
+    fn epoch(source: &str) -> Self {
+        Self {
+            inner: RustVexValue::new_epoch(source),
+        }
+    }
+
+    #[staticmethod]
+    fn right_ascension(source: &str) -> Self {
+        Self {
+            inner: RustVexValue::new_ra(source),
+        }
+    }
+
+    #[staticmethod]
+    fn declination(source: &str) -> Self {
+        Self {
+            inner: RustVexValue::new_dec(source),
+        }
+    }
+
+    #[staticmethod]
+    fn link(source: &str) -> Self {
+        Self {
+            inner: RustVexValue::new_link(source),
+        }
+    }
+
+    #[staticmethod]
+    fn empty() -> Self {
+        Self {
+            inner: RustVexValue::empty(),
+        }
+    }
+
+    #[staticmethod]
+    fn parse(source: &str) -> PyResult<Self> {
+        RustVexValue::from_str(source)
+            .map(|inner| Self { inner })
+            .map_err(parse_error)
+    }
+
+    #[getter]
+    fn source(&self) -> &str {
+        self.inner.source()
+    }
+
+    #[setter]
+    fn set_source(&mut self, source: &str) {
+        self.inner.set_source(source);
+    }
+
+    #[getter]
+    fn kind(&self) -> PyVexValueKind {
+        self.inner.kind().into()
+    }
+
+    #[setter]
+    fn set_kind(&mut self, kind: PyRef<'_, PyVexValueKind>) {
+        self.inner.set_kind((*kind).into());
+    }
+
+    #[getter]
+    fn unit(&self) -> Option<&str> {
+        self.inner.unit()
+    }
+
+    #[setter]
+    fn set_unit(&mut self, unit: Option<&str>) {
+        match unit {
+            Some(unit) => self.inner.set_unit(unit),
+            None => self.inner.clear_unit(),
+        }
+    }
+
+    fn clear_unit(&mut self) {
+        self.inner.clear_unit();
+    }
+
+    fn to_vex(&self) -> String {
+        self.inner.to_string()
+    }
+
+    fn __str__(&self) -> String {
+        self.inner.to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "VexValue({:?}, {:?}, {:?})",
+            self.inner.source(),
+            self.inner.kind(),
+            self.inner.unit()
+        )
+    }
+}
+
+#[pyclass(name = "VexVersion")]
+#[derive(Clone)]
+struct PyVexVersion {
+    inner: RustVexVersion,
+}
+
+#[pymethods]
+impl PyVexVersion {
+    #[new]
+    fn new(major: u8, minor: u8) -> Self {
+        Self {
+            inner: RustVexVersion::new(major, minor),
+        }
+    }
+
+    #[getter]
+    fn major(&self) -> u8 {
+        self.inner.maj
+    }
+
+    #[getter]
+    fn minor(&self) -> u8 {
+        self.inner.min
+    }
+
+    fn __str__(&self) -> String {
+        self.inner.to_string()
+    }
+
+    fn __repr__(&self) -> String {
+        format!("VexVersion({}, {})", self.inner.maj, self.inner.min)
     }
 }
 
 #[pyclass(name = "Global")]
-/// Represents the unique ``GLOBAL`` block within a Vex file.
+#[derive(Clone, Default)]
 struct PyGlobal {
-    inner: Global,
+    inner: RustGlobal,
 }
 
 #[pymethods]
 impl PyGlobal {
-    /// Make a new, empty, Global block.
     #[new]
     fn new() -> Self {
-        Self { inner: Global::new() }
+        Self::default()
     }
 
-    /// Add a ``VexRef`` to this global block.
-    fn add_ref(&mut self, refr: &PyVexRef) {
-        self.inner.add_ref(refr.inner.clone());
-    }
-
-    /// Retrieve references to all ``VexRef``s with block names matching ``blk``.
-    fn get(&self, blk: String) -> Vec<PyVexRef> {
-        self.inner.get(blk).into_iter().cloned().map(|r| PyVexRef { inner: r }).collect()
-    }
-
-    /// Return an iterator over all ``VexRef``s in this ``Global``.
-    fn refs(&self) -> Vec<PyVexRef> {
-        self.inner.as_slice().iter().cloned().map(|r| PyVexRef { inner: r }).collect()
-    }
-
-    /// Get a representation of this global block as a Vex formatted string.
-    fn to_vex(&self) -> String {
-        self.inner.to_vex()
-    }
-
-    /// Get a representation of this global block as a Vex formatted string,
-    /// with unneccesary whitespace removed.
-    fn to_vex_minified(&self) -> String {
-        self.inner.to_vex_minified()
-    }
-
-    /// Parse a ``Global`` block from a string slice.
     #[staticmethod]
-    fn parse(vex: &str) -> Result<Self, PyVexError> {
-        match Global::parse(vex) {
-            Ok(parsed) => Ok(PyGlobal { inner: parsed }),
-            Err(e) => Err(PyVexError(VexError::ParseError(e))),
-        }
+    fn parse(source: &str) -> PyResult<Self> {
+        RustGlobal::from_str(source)
+            .map(|inner| Self { inner })
+            .map_err(parse_error)
+    }
+
+    fn add(&mut self, key: &str, value: PyRef<'_, PyVexValue>) -> Option<PyVexValue> {
+        self.inner
+            .add(key, value.inner.clone())
+            .map(|inner| PyVexValue { inner })
+    }
+
+    fn get(&self, key: &str) -> Option<PyVexValue> {
+        self.inner
+            .get(key)
+            .cloned()
+            .map(|inner| PyVexValue { inner })
+    }
+
+    fn remove(&mut self, key: &str) -> Option<PyVexValue> {
+        self.inner.remove(key).map(|inner| PyVexValue { inner })
+    }
+
+    fn contains(&self, key: &str) -> bool {
+        self.inner.contains_key(key)
+    }
+
+    fn keys(&self) -> Vec<String> {
+        let mut keys: Vec<_> = self.inner.iter().map(|(key, _)| key.clone()).collect();
+        keys.sort();
+        keys
+    }
+
+    fn values(&self) -> Vec<PyVexValue> {
+        self.inner
+            .iter()
+            .map(|(_, value)| PyVexValue {
+                inner: value.clone(),
+            })
+            .collect()
+    }
+
+    fn to_vex(&self) -> String {
+        self.inner.to_string()
+    }
+
+    fn __len__(&self) -> usize {
+        self.inner.iter().count()
+    }
+
+    fn __contains__(&self, key: &str) -> bool {
+        self.contains(key)
+    }
+
+    fn __getitem__(&self, key: &str) -> PyResult<PyVexValue> {
+        self.get(key)
+            .ok_or_else(|| PyKeyError::new_err(key.to_owned()))
+    }
+
+    fn __setitem__(&mut self, key: &str, value: PyRef<'_, PyVexValue>) {
+        self.inner.add(key, value.inner.clone());
+    }
+
+    fn __str__(&self) -> String {
+        self.to_vex()
     }
 }
 
-#[pyclass(name = "HighLevelDef")]
-/// A `def` block within a high level Vex block.
-struct PyHighLevelDef {
-    inner: HighLevelDef,
+#[pyclass(name = "BlockDef")]
+#[derive(Clone)]
+struct PyBlockDef {
+    inner: RustBlockDef,
 }
 
 #[pymethods]
-impl PyHighLevelDef {
-    /// Construct a new ``HighLevelDef`` from a name and a series of ``VexRef``s.
+impl PyBlockDef {
     #[new]
-    fn new(name: String) -> Self {
+    fn new(name: &str, parent_kind: PyRef<'_, PyBlockKind>) -> Self {
         Self {
-            inner: HighLevelDef::new_empty(name),
+            inner: RustBlockDef::new(name, (*parent_kind).into()),
         }
     }
 
-    /// Get the name of this def block.
-    #[getter]
-    fn name(&self) -> String {
-        self.inner.name().to_string()
-    }
-
-    /// Add a ``VexRef`` to this ``HighLevelDef``.
-    fn add_ref(&mut self, refr: &PyVexRef) {
-        self.inner.add_ref(refr.inner.clone());
-    }
-
-    /// Retrieve references to all ``VexRef``s with block names matching ``blk``.
-    fn get(&self, blk: String) -> Vec<PyVexRef> {
-        self.inner.get(blk).into_iter().cloned().map(|r| PyVexRef { inner: r }).collect()
-    }
-
-    /// Return an iterator over all ``VexRef``s in this ``HighLevelDef``.
-    fn refs(&self) -> Vec<PyVexRef> {
-        self.inner.as_slice().iter().cloned().map(|r| PyVexRef { inner: r }).collect()
-    }
-
-    /// Get a representation of this high level def as a Vex formatted string.
-    fn to_vex(&self) -> String {
-        self.inner.to_vex()
-    }
-
-    /// Get a representation of this block as a Vex formatted string,
-    /// with unnecessary whitespace removed.
-    fn to_vex_minified(&self) -> String {
-        self.inner.to_vex_minified()
-    }
-
-    /// Parse a ``HighLevelDef`` from a string slice.
     #[staticmethod]
-    fn parse(vex: &str) -> Result<Self, PyVexError> {
-        match HighLevelDef::parse(vex) {
-            Ok(parsed) => Ok(PyHighLevelDef { inner: parsed }),
-            Err(e) => Err(PyVexError(VexError::ParseError(e))),
-        }
-    }
-}
-
-#[pyclass(name = "HighLevelBlock")]
-/// A high level Vex block. Currently this is either a `$MODE` or a `$STATION` block.
-struct PyHighLevelBlock {
-    inner: HighLevelBlock,
-}
-
-#[pymethods]
-impl PyHighLevelBlock {
-    /// Construct a new ``HighLevelBlock`` from a name and a series of ``HighLevelDef``s.
-    #[new]
-    fn new(name: String) -> Self {
+    fn highlevel(name: &str) -> Self {
         Self {
-            inner: HighLevelBlock::new_empty(name),
+            inner: RustBlockDef::new_highlevel(name),
         }
     }
 
-    /// Get the name of this block. Currently this is either "MODE" or "STATION".
-    #[getter]
-    fn name(&self) -> String {
-        self.inner.name().to_string()
-    }
-
-    /// Get a reference to the ``HighLevelDef`` block with name ``key``,
-    /// returning ``None`` if it doesn't exist.
-    fn get(&self, name: String) -> Option<PyHighLevelDef> {
-        self.inner.get(name).map(|d| PyHighLevelDef { inner: d.clone() })
-    }
-
-    /// Return an iterator over all the names of ``HighLevelDef`` blocks
-    /// within this ``HighLevelBlock``.
-    #[getter]
-    fn def_names(&self) -> Vec<String> {
-        self.inner.def_names().cloned().collect()
-    }
-
-    /// Return an iterator over all the ``HighLevelDef`` blocks within this
-    /// ``HighLevelBlock``.
-    #[getter]
-    fn defs(&self) -> Vec<PyHighLevelDef> {
-        self.inner.defs().map(|d| PyHighLevelDef { inner: d.clone() }).collect()
-    }
-
-    /// Get a representation of this block as a Vex formatted string.
-    fn to_vex(&self) -> String {
-        self.inner.to_vex()
-    }
-
-    /// Get a representation of this block as a Vex formatted string,
-    /// with unnecessary whitespace removed.
-    fn to_vex_minified(&self) -> String {
-        self.inner.to_vex_minified()
-    }
-
-    /// Parse a ``HighLevelBlock`` from a string slice.
     #[staticmethod]
-    fn parse(vex: &str) -> Result<Self, PyVexError> {
-        match HighLevelBlock::parse(vex) {
-            Ok(parsed) => Ok(PyHighLevelBlock { inner: parsed }),
-            Err(e) => Err(PyVexError(VexError::ParseError(e))),
+    fn primitive(name: &str) -> Self {
+        Self {
+            inner: RustBlockDef::new_primitive(name),
         }
+    }
+
+    #[staticmethod]
+    fn scan(name: &str) -> Self {
+        Self {
+            inner: RustBlockDef::new_scan(name),
+        }
+    }
+
+    #[staticmethod]
+    fn parse(source: &str) -> PyResult<Self> {
+        RustBlockDef::from_str(source)
+            .map(|inner| Self { inner })
+            .map_err(parse_error)
+    }
+
+    #[getter]
+    fn name(&self) -> &str {
+        self.inner.name()
+    }
+
+    #[getter]
+    fn parent_kind(&self) -> PyBlockKind {
+        self.inner.parentkind().into()
+    }
+
+    #[setter]
+    fn set_parent_kind(&mut self, kind: PyRef<'_, PyBlockKind>) {
+        self.inner.set_parentkind((*kind).into());
+    }
+
+    fn add(&mut self, py: Python<'_>, name: &str, values: Vec<Py<PyVexValue>>) {
+        self.inner.add(name, clone_values(py, values));
+    }
+
+    fn get(&self, py: Python<'_>, name: &str) -> PyResult<Option<Vec<Vec<Py<PyVexValue>>>>> {
+        self.inner
+            .get(name)
+            .map(|occurrences| {
+                occurrences
+                    .iter()
+                    .map(|values| wrap_values(py, values.clone()))
+                    .collect()
+            })
+            .transpose()
+    }
+
+    fn get_first(&self, py: Python<'_>, name: &str) -> PyResult<Option<Vec<Py<PyVexValue>>>> {
+        self.inner
+            .get_first(name)
+            .map(|values| wrap_values(py, values.clone()))
+            .transpose()
+    }
+
+    fn remove(&mut self, py: Python<'_>, name: &str) -> PyResult<Option<Vec<Vec<Py<PyVexValue>>>>> {
+        self.inner
+            .remove(name)
+            .map(|occurrences| {
+                occurrences
+                    .into_iter()
+                    .map(|values| wrap_values(py, values))
+                    .collect()
+            })
+            .transpose()
+    }
+
+    fn remove_single(
+        &mut self,
+        py: Python<'_>,
+        name: &str,
+        index: usize,
+    ) -> PyResult<Option<Vec<Py<PyVexValue>>>> {
+        self.inner
+            .remove_single(name, index)
+            .map(|values| wrap_values(py, values))
+            .transpose()
+    }
+
+    fn contains(&self, name: &str) -> bool {
+        self.inner.contains_key(name)
+    }
+
+    fn keys(&self) -> Vec<String> {
+        let mut keys: Vec<_> = self.inner.iter().map(|(key, _)| key.clone()).collect();
+        keys.sort();
+        keys
+    }
+
+    fn to_vex(&self) -> String {
+        self.inner.to_string()
+    }
+
+    fn __len__(&self) -> usize {
+        self.inner.iter().count()
+    }
+
+    fn __contains__(&self, name: &str) -> bool {
+        self.contains(name)
+    }
+
+    fn __getitem__(&self, py: Python<'_>, name: &str) -> PyResult<Vec<Vec<Py<PyVexValue>>>> {
+        self.get(py, name)?
+            .ok_or_else(|| PyKeyError::new_err(name.to_owned()))
+    }
+
+    fn __setitem__(&mut self, py: Python<'_>, name: &str, occurrences: Vec<Vec<Py<PyVexValue>>>) {
+        self.inner.remove(name);
+        for occurrence in occurrences {
+            self.inner.add(name, clone_values(py, occurrence));
+        }
+    }
+
+    fn __str__(&self) -> String {
+        self.to_vex()
     }
 }
 
 #[pyclass(name = "Block")]
-/// A primitive Vex block.
+#[derive(Clone)]
 struct PyBlock {
-    inner: Block,
+    inner: RustBlock,
 }
 
 #[pymethods]
 impl PyBlock {
-    /// Construct a new primitive Vex ``Block`` from a name and a series of
-    /// ``Def``s.
     #[new]
-    fn new(name: String) -> Self {
-        Self { inner: Block::new_empty(name) }
+    fn new(name: &str, kind: PyRef<'_, PyBlockKind>) -> PyResult<Self> {
+        let inner = match *kind {
+            PyBlockKind::HighLevel => RustBlock::new_highlevel(name),
+            PyBlockKind::Primitive => RustBlock::new_primitive(name),
+            PyBlockKind::Schedule if name.eq_ignore_ascii_case("SCHED") => {
+                RustBlock::new_schedule()
+            }
+            PyBlockKind::Schedule => {
+                return Err(PyValueError::new_err(
+                    "schedule blocks must use the name 'SCHED'",
+                ));
+            }
+        };
+        Ok(Self { inner })
     }
 
-    /// Get the name of this block. This may be something like "EXPER" or
-    /// "ANTENNA".
-    #[getter]
-    fn name(&self) -> String {
-        self.inner.name().to_string()
-    }
-
-    /// Get a reference to the ``Def`` block with name ``key``, returning
-    /// ``None`` if it doesn't exist.
-    fn get(&self, name: String) -> Option<PyDef> {
-        self.inner.get(name).map(|d| PyDef { inner: d.clone() })
-    }
-
-    /// Return an iterator over all the names of ``Def`` blocks within this
-    /// ``Block``.
-    #[getter]
-    fn def_names(&self) -> Vec<String> {
-        self.inner.def_names().cloned().collect()
-    }
-
-    /// Return an iterator over all the ``Def`` blocks within this ``Block``.
-    #[getter]
-    fn defs(&self) -> Vec<PyDef> {
-        self.inner.defs().map(|d| PyDef { inner: d.clone() }).collect()
-    }
-
-    /// Add a ``Def`` to this block, overwriting one with the same name if it exists
-    fn add_def(&mut self, def: &PyDef) {
-        self.inner.add_def(def.inner.clone())
-    }
-
-    /// Get a representation of this block as a Vex formatted string.
-    fn to_vex(&self) -> String {
-        self.inner.to_vex()
-    }
-
-    /// Get a representation of this block as a Vex formatted string,
-    /// with unnecessary whitespace removed.
-    fn to_vex_minified(&self) -> String {
-        self.inner.to_vex_minified()
-    }
-
-    /// Parse a ``Block`` from a string slice.
     #[staticmethod]
-    fn parse(vex: &str) -> Result<Self, PyVexError> {
-        match Block::parse(vex) {
-            Ok(parsed) => Ok(PyBlock { inner: parsed }),
-            Err(e) => Err(PyVexError(VexError::ParseError(e))),
+    fn highlevel(name: &str) -> Self {
+        Self {
+            inner: RustBlock::new_highlevel(name),
         }
+    }
+
+    #[staticmethod]
+    fn primitive(name: &str) -> Self {
+        Self {
+            inner: RustBlock::new_primitive(name),
+        }
+    }
+
+    #[staticmethod]
+    fn schedule() -> Self {
+        Self {
+            inner: RustBlock::new_schedule(),
+        }
+    }
+
+    #[staticmethod]
+    fn parse(source: &str) -> PyResult<Self> {
+        RustBlock::from_str(source)
+            .map(|inner| Self { inner })
+            .map_err(parse_error)
+    }
+
+    #[getter]
+    fn name(&self) -> &str {
+        self.inner.name()
+    }
+
+    #[getter]
+    fn kind(&self) -> PyBlockKind {
+        self.inner.kind().into()
+    }
+
+    fn add(&mut self, definition: PyRef<'_, PyBlockDef>) -> Option<PyBlockDef> {
+        self.inner
+            .add(definition.inner.clone())
+            .map(|inner| PyBlockDef { inner })
+    }
+
+    fn get(&self, name: &str) -> Option<PyBlockDef> {
+        self.inner
+            .get(name)
+            .cloned()
+            .map(|inner| PyBlockDef { inner })
+    }
+
+    fn remove(&mut self, name: &str) -> Option<PyBlockDef> {
+        self.inner.remove(name).map(|inner| PyBlockDef { inner })
+    }
+
+    fn contains(&self, name: &str) -> bool {
+        self.inner.contains_key(name)
+    }
+
+    fn keys(&self) -> Vec<String> {
+        let mut keys: Vec<_> = self.inner.iter().map(|(key, _)| key.clone()).collect();
+        keys.sort();
+        keys
+    }
+
+    fn definitions(&self) -> Vec<PyBlockDef> {
+        self.keys()
+            .into_iter()
+            .filter_map(|name| self.get(&name))
+            .collect()
+    }
+
+    fn to_vex(&self) -> String {
+        self.inner.to_string()
+    }
+
+    fn __len__(&self) -> usize {
+        self.inner.iter().count()
+    }
+
+    fn __contains__(&self, name: &str) -> bool {
+        self.contains(name)
+    }
+
+    fn __getitem__(&self, name: &str) -> PyResult<PyBlockDef> {
+        self.get(name)
+            .ok_or_else(|| PyKeyError::new_err(name.to_owned()))
+    }
+
+    fn __setitem__(&mut self, name: &str, definition: PyRef<'_, PyBlockDef>) {
+        let mut replacement = definition.inner.clone();
+        replacement.set_name(name);
+        self.inner.add(replacement);
+    }
+
+    fn __str__(&self) -> String {
+        self.to_vex()
     }
 }
 
-#[pyclass(name = "Scan")]
-/// A single scan within a ``Schedule``.
-struct PyScan {
-    inner: Scan,
+#[pyclass(name = "Vex")]
+#[derive(Clone)]
+struct PyVex {
+    inner: RustVex,
 }
 
 #[pymethods]
-impl PyScan {
-    /// Construct a new ``Scan`` from a name and a series of ``Param``s.
-    #[new]
-    fn new(name: String) -> Self {
-        Self { inner: Scan::new_empty(name) }
-    }
-
-    /// Get the name of this scan.
-    #[getter]
-    fn name(&self) -> String {
-        self.inner.name().to_string()
-    }
-
-    /// Add a new parameter to this ``Scan``.
-    fn add_param(&mut self, param: &PyParam) {
-        self.inner.add_param(param.inner.clone());
-    }
-
-    /// Retrieve all ``Param``s with parameter names matching ``name``.
-    fn get_param(&self, name: String) -> Option<PyParam> {
-        self.inner.get(&name).first().map(|p| PyParam { inner: (*p).clone() })
-    }
-
-    /// Retrieve all ``Param``s with parameter names matching ``name``.
-    fn get_params(&self, name: String) -> Vec<PyParam> {
-        self.inner.get(&name).into_iter().map(|p| PyParam { inner: (*p).clone() }).collect()
-    }
-
-    /// Return an iterator over the names of parameters in this scan.
-    fn param_names(&self) -> Vec<String> {
-        self.inner.params().map(|p| p.name().to_string()).collect()
-    }
-
-    /// Return an iterator over all the parameters in this scan.
-    fn params(&self) -> Vec<PyParam> {
-        self.inner.params().cloned().map(|p| PyParam { inner: p }).collect()
-    }
-
-    /// Get a representation of this scan as a Vex formatted string.
-    fn to_vex(&self) -> String {
-        self.inner.to_vex()
-    }
-
-    /// Get a representation of this scan as a Vex formatted string,
-    /// with unneccesary whitespace removed.
-    fn to_vex_minified(&self) -> String {
-        self.inner.to_vex_minified()
-    }
-
-    /// Parse a scan from a string slice.
-    #[staticmethod]
-    fn parse(vex: &str) -> Result<Self, PyVexError> {
-        match Scan::parse(vex) {
-            Ok(parsed) => Ok(PyScan { inner: parsed }),
-            Err(e) => Err(PyVexError(VexError::ParseError(e))),
-        }
-    }
-}
-
-#[pyclass(name = "Schedule")]
-/// Represents the unique ``SCHED`` block within a Vex file.
-struct PySchedule {
-    inner: Schedule,
-}
-
-#[pymethods]
-impl PySchedule {
-    /// Create a new empty schedule.
+impl PyVex {
     #[new]
     fn new() -> Self {
-        Self { inner: Schedule::new() }
-    }
-
-    /// Add a scan to this schedule.
-    fn add_scan(&mut self, scan: &PyScan) {
-        self.inner.add_scan(scan.inner.clone());
-    }
-
-    /// Return an iterator over the scans in this schedule.
-    #[getter]
-    fn scans(&self) -> Vec<PyScan> {
-        self.inner.scans().map(|s| PyScan { inner: s.clone() }).collect()
-    }
-
-    /// Get a representation of this schedule as a Vex formatted string.
-    fn to_vex(&self) -> String {
-        self.inner.to_vex()
-    }
-
-    /// Get a representation of this schedule as a Vex formatted string,
-    /// with unneccesary whitespace removed.
-    fn to_vex_minified(&self) -> String {
-        self.inner.to_vex_minified()
-    }
-
-    /// Parse a schedule from a string slice.
-    #[staticmethod]
-    fn parse(vex: &str) -> Result<Self, PyVexError> {
-        match Schedule::parse(vex) {
-            Ok(parsed) => Ok(PySchedule { inner: parsed }),
-            Err(e) => Err(PyVexError(VexError::ParseError(e))),
+        Self {
+            inner: RustVex::new(),
         }
     }
+
+    #[staticmethod]
+    fn parse(source: &str) -> PyResult<Self> {
+        RustVex::from_str(source)
+            .map(|inner| Self { inner })
+            .map_err(parse_error)
+    }
+
+    #[staticmethod]
+    fn open(path: &str) -> PyResult<Self> {
+        RustVex::open(path)
+            .map(|inner| Self { inner })
+            .map_err(vex_error)
+    }
+
+    fn save(&self, path: &str) -> PyResult<()> {
+        std::fs::write(path, self.inner.to_string())
+            .map_err(|error| PyOSError::new_err(error.to_string()))
+    }
+
+    fn to_vex(&self) -> String {
+        self.inner.to_string()
+    }
+
+    #[getter]
+    fn version(&self, py: Python<'_>) -> PyResult<Py<PyVexVersion>> {
+        Py::new(
+            py,
+            PyVexVersion {
+                inner: self.inner.version(),
+            },
+        )
+    }
+
+    #[setter(version)]
+    fn set_version(&mut self, version: PyRef<'_, PyVexVersion>) {
+        self.inner.set_version(
+            usize::from(version.inner.maj),
+            usize::from(version.inner.min),
+        );
+    }
+
+    #[getter]
+    fn global_block(&self, py: Python<'_>) -> PyResult<Py<PyGlobal>> {
+        Py::new(
+            py,
+            PyGlobal {
+                inner: self.inner.global().clone(),
+            },
+        )
+    }
+
+    #[setter(global_block)]
+    fn set_global_block(&mut self, global: PyRef<'_, PyGlobal>) {
+        *self.inner.global_mut() = global.inner.clone();
+    }
+
+    fn get_block(&self, py: Python<'_>, name: &str) -> PyResult<Option<Py<PyBlock>>> {
+        let name = name.to_ascii_uppercase();
+        self.inner
+            .get(&name)
+            .cloned()
+            .map(|inner| Py::new(py, PyBlock { inner }))
+            .transpose()
+    }
+
+    fn add_block(
+        &mut self,
+        py: Python<'_>,
+        block: PyRef<'_, PyBlock>,
+    ) -> PyResult<Option<Py<PyBlock>>> {
+        self.inner
+            .add(block.inner.clone())
+            .map(|inner| Py::new(py, PyBlock { inner }))
+            .transpose()
+    }
+
+    fn remove_block(&mut self, py: Python<'_>, name: &str) -> PyResult<Option<Py<PyBlock>>> {
+        let name = name.to_ascii_uppercase();
+        self.inner
+            .remove(&name)
+            .map(|inner| Py::new(py, PyBlock { inner }))
+            .transpose()
+    }
+
+    fn block_names(&self) -> Vec<String> {
+        let mut names: Vec<_> = self.inner.iter().map(|(name, _)| name.clone()).collect();
+        names.sort();
+        names
+    }
+
+    fn blocks(&self, py: Python<'_>) -> PyResult<Vec<Py<PyBlock>>> {
+        self.block_names()
+            .into_iter()
+            .filter_map(|name| self.inner.get(&name).cloned())
+            .map(|inner| Py::new(py, PyBlock { inner }))
+            .collect()
+    }
+
+    fn __len__(&self) -> usize {
+        self.inner.iter().count()
+    }
+
+    fn __contains__(&self, name: &str) -> bool {
+        self.inner.contains_key(name.to_ascii_uppercase())
+    }
+
+    fn __getitem__(&self, py: Python<'_>, name: &str) -> PyResult<Py<PyBlock>> {
+        self.get_block(py, name)?
+            .ok_or_else(|| PyKeyError::new_err(name.to_owned()))
+    }
+
+    fn __setitem__(&mut self, name: &str, block: PyRef<'_, PyBlock>) -> PyResult<()> {
+        if !name.eq_ignore_ascii_case(block.inner.name()) {
+            return Err(PyValueError::new_err(format!(
+                "mapping key {name:?} does not match block name {:?}",
+                block.inner.name()
+            )));
+        }
+        self.inner.add(block.inner.clone());
+        Ok(())
+    }
+
+    fn __str__(&self) -> String {
+        self.to_vex()
+    }
+}
+
+#[pymodule]
+fn _vexio(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<PyBlockKind>()?;
+    module.add_class::<PyVexValueKind>()?;
+    module.add_class::<PyVexValue>()?;
+    module.add_class::<PyVexVersion>()?;
+    module.add_class::<PyGlobal>()?;
+    module.add_class::<PyBlockDef>()?;
+    module.add_class::<PyBlock>()?;
+    module.add_class::<PyVex>()?;
+    Ok(())
 }

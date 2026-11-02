@@ -30,34 +30,11 @@ First and foremost, `vexio` provides a detailed error message when things go wro
 
 The `Diagnostic` trait provided by `miette` is implemented only when the `miette` feature of `vexio` is enabled (which is _disabled_ by default).
 
-### Convenient Construction
-
-`vexio` provides some handy macros for constructing Vex components, like constructing a `def` block:
-```rust
-let param_name = "my_parameter".to_string();
-let num = 64;
-let mydef = def!("my_def_block";
-    "{param_name}" = "value" : "{num}";
-    "param2" = "&my_link" : "64 TB";
-);
-
-// Equivalent to:
-// def my_def_block;
-//      my_parameter = value : 64;
-//      param2 = &my_link : 64 TB;
-// enddef;
-```
-
-Or a `ref` declaration:
-```rust
-let refr = refr!("MYBLOCK" = "keyword" : "qual1" : "qual2");
-
-// Equivalent to:
-// ref $MYBLOCK = keyword : qual1 : qual2;
-```
+### `serde` Support
+With the `serde` feature enabled, all `vexio` types implement the `Serialize` and `Deserialize` traits.
 
 ### Permissive Parsing
-`vexio` does not take an opinion on whether your vex file contains valid Vex, only that it is written using Vex syntax. This may change in the future, but for now it seems that the Vex specification (outside of the syntax) is only loosely enforced, so the software follows this trend. For you, this means that you can create an entirely new undefined primitive block and write your Vex file normally. You can then send this to someone else using `vexio` which will parse that undefined block as a normal primitive block.
+`vexio` does not take an opinion on whether your vex file contains valid Vex, only that it is written using Vex syntax. This may change in the future, but for now it seems that the Vex specification (outside of the syntax) is only loosely enforced, so the software follows this trend. For you, this means that you can create an entirely new undefined primitive block and write your Vex file normally. You can then send this to someone else using `vexio` which will parse that undefined block as a primitive block.
 
 ### Python bindings
 Python bindings to `vexio` can be found under [`py/`](./py)

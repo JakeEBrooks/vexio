@@ -8,5 +8,5 @@ name = "vexio"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = "*"
-vexio = { path = "../", default-features = false }
+pyo3 = { version = "0.30", features = ["extension-module"] }
+vexio = { path = ".." }

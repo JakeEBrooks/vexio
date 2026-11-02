@@ -1,127 +1,148 @@
 use std::collections::HashMap;
+use std::collections::hash_map::{Iter, IterMut};
+use std::fmt::Display;
+use std::fs::File;
 use std::io::{Read, Seek};
+use std::ops::{Index, IndexMut};
 use std::path::Path;
+use std::str::FromStr;
 
-use crate::error::{ParseError, VexError};
+use crate::error::{ParseError, ParseErrorKind, VexError};
 use crate::parsing::Parser;
-use crate::{Block, Global, HighLevelBlock, HighLevelDef, Schedule};
+use crate::{Block, Global};
 
-/// A Vex file
+/// A complete VEX document, including its version, global block, and named blocks.
 ///
-/// This is the top level type provided by this crate, and represents the full contents of a Vex file.
-/// A [`Vex`] can be constructed manually, or parsed from a string slice (see [`Self::parse`])
-#[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize), derive(serde::Deserialize))]
+/// A [`Vex`] can be constructed manually, opened from a file, or parsed from a string
+/// using [`str::parse`].
+#[derive(Debug, Clone)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
+)]
 pub struct Vex {
-    /// The value of the VEX_rev definition
-    pub rev: VexVersion,
-    /// The [`Global`] block for this [`Vex`]
-    pub global: Global,
-    /// The `STATION` [`HighLevelBlock`] for this [`Vex`]
-    pub station: HighLevelBlock,
-    /// The `MODE` [`HighLevelBlock`] for this [`Vex`]
-    pub mode: HighLevelBlock,
-    /// The primitive blocks for this [`Vex`]
-    pub primitives: HashMap<String, Block>,
-    /// The [`Schedule`] for this [`Vex`]
-    pub schedule: Schedule,
+    version: VexVersion,
+    global: Global,
+    blocks: HashMap<String, Block>,
 }
 
 impl Vex {
-    /// Construct an empty [`Vex`]
+    /// Creates an empty VEX document using the default VEX version.
     pub fn new() -> Self {
         Self {
-            rev: VexVersion::default(),
-            global: Global::new(),
-            station: HighLevelBlock::new("STATION", []),
-            mode: HighLevelBlock::new("MODE", []),
-            primitives: HashMap::new(),
-            schedule: Schedule::new(),
+            version: VexVersion::default(),
+            global: Global::default(),
+            blocks: HashMap::new(),
         }
     }
 
-    /// Open a Vex file using the provided file path
-    pub fn open(path: impl AsRef<Path>) -> Result<Self, VexError> {
-        let mut file = std::fs::File::open(path)?;
+    /// Opens and parses a VEX document from a file path.
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, VexError> {
+        let mut file = File::open(path)?;
+
+        // Read a small amount to check for a valid vex file
+        let mut header_bytes = [0u8; 128];
+        let n = file.read(&mut header_bytes)?;
+        // Now try to parse a vex_rev
+        let _vexrev = Parser::new(std::str::from_utf8(&header_bytes[..n]).map_err(|_| {
+            ParseError::new(
+                ParseErrorKind::InvalidVexRev,
+                String::from_utf8_lossy(&header_bytes),
+                0,
+                0,
+            )
+        })?)?
+        .parse_vex_version()?;
+
+        // If we did then start over and attempt to parse the whole thing
+        file.rewind()?;
         let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        let vex = Parser::new(&contents)?.parse_vex()?;
+        Ok(vex)
+    }
 
-        // The first 9 bytes should be "VEX_rev ="
-        // Don't bother reading the whole file and attempting to parse
-        // unless it is
-        let mut vex_rev_bytes: [u8; 9] = [0u8; 9];
-        file.read_exact(&mut vex_rev_bytes)?;
+    /// Return the GLOBAL block.
+    pub fn global(&self) -> &Global {
+        &self.global
+    }
 
-        if &vex_rev_bytes == b"VEX_rev =" {
-            file.rewind()?;
-            file.read_to_string(&mut contents)?;
-            Vex::parse(&contents)
-        } else {
-            Err(VexError::MissingVexRev)
+    /// Returns mutable access to the GLOBAL block.
+    pub fn global_mut(&mut self) -> &mut Global {
+        &mut self.global
+    }
+
+    /// Returns the VEX version.
+    pub fn version(&self) -> VexVersion {
+        self.version
+    }
+
+    /// Sets the major and minor VEX version numbers.
+    pub fn set_version(&mut self, maj: usize, min: usize) {
+        self.version = VexVersion {
+            maj: maj as u8,
+            min: min as u8,
         }
     }
 
-    /// Add a `GLOBAL` high level block, overwriting the current one
-    pub fn set_global(&mut self, global: Global) {
-        self.global = global;
+    /// Inserts a block, returning any previous block with the same name.
+    pub fn add(&mut self, block: Block) -> Option<Block> {
+        self.blocks.insert(block.name().to_string(), block)
     }
 
-    /// Add a `STATION` high level block, overwriting the current one
-    pub fn set_station(&mut self, defs: impl Into<Vec<HighLevelDef>>) {
-        self.station = HighLevelBlock::new("STATION", defs.into());
+    /// Returns the block with the given name, if present.
+    pub fn get(&self, name: impl AsRef<str>) -> Option<&Block> {
+        self.blocks.get(name.as_ref())
     }
 
-    /// Add a `MODE` high level block, overwriting the current one
-    pub fn set_mode(&mut self, defs: impl Into<Vec<HighLevelDef>>) {
-        self.mode = HighLevelBlock::new("MODE", defs.into());
+    /// Returns mutable access to the block with the given name, if present.
+    pub fn get_mut(&mut self, name: impl AsRef<str>) -> Option<&mut Block> {
+        self.blocks.get_mut(name.as_ref())
     }
 
-    /// Add a primitive block.
-    ///
-    /// This will overwrite a block with the same name
-    pub fn set_primitive(&mut self, block: Block) {
-        let _ = self.primitives.insert(block.name().to_string(), block);
+    /// Iterates over blocks as `(name, block)` pairs.
+    pub fn iter(&self) -> Iter<'_, String, Block> {
+        self.blocks.iter()
     }
 
-    /// Add a `SCHED` block, overwriting the current one
-    pub fn set_schedule(&mut self, sched: Schedule) {
-        self.schedule = sched;
+    /// Mutably iterates over blocks as `(name, block)` pairs.
+    pub fn iter_mut(&mut self) -> IterMut<'_, String, Block> {
+        self.blocks.iter_mut()
     }
 
-    /// Get a representation of this Vex as a Vex formatted string
-    pub fn to_vex(&self) -> String {
-        format!(
-            "{}\n{}\n{}\n{}\n{}\n{}",
-            self.rev.to_vex(),
-            self.global.to_vex(),
-            self.mode.to_vex(),
-            self.station.to_vex(),
-            self.primitives.values().map(|b| b.to_vex()).collect::<Vec<String>>().join("\n"),
-            self.schedule.to_vex()
-        )
+    /// Returns whether a block with the given name is present.
+    pub fn contains_key(&self, name: impl AsRef<str>) -> bool {
+        self.blocks.contains_key(name.as_ref())
     }
 
-    /// Get a representation of this Vex as a Vex formatted string, with unneccesary whitespace removed
-    pub fn to_vex_minified(&self) -> String {
-        format!(
-            "{}{}{}{}{}{}",
-            self.rev.to_vex_minified(),
-            self.global.to_vex_minified(),
-            self.mode.to_vex_minified(),
-            self.station.to_vex_minified(),
-            self.primitives.values().map(|b| b.to_vex_minified()).collect::<Vec<String>>().join(""),
-            self.schedule.to_vex_minified()
-        )
+    /// Removes and returns the block with the given name, if present.
+    pub fn remove(&mut self, name: impl AsRef<str>) -> Option<Block> {
+        self.blocks.remove(name.as_ref())
     }
 
-    /// Parse a [`Vex`] from a Vex formatted string slice
-    pub fn parse(vex: &str) -> Result<Self, VexError> {
-        Parser::new(vex).parse()
-    }
+    fn to_vex(&self) -> String {
+        let mut vex = format!("{}\n{}", self.version, self.global);
+        // Print MODE and STATION first, then SCHED last
+        if let Some(mode) = self.get("MODE") {
+            vex += &mode.to_string();
+        }
 
-    /// Save this [`Vex`] to a file, overwriting the file at `path` if it already exists
-    pub fn save(&self, path: impl AsRef<Path>) -> Result<(), VexError> {
-        std::fs::write(path, self.to_vex())?;
-        Ok(())
+        if let Some(station) = self.get("STATION") {
+            vex += &station.to_string();
+        }
+
+        for (k, v) in self.blocks.iter() {
+            if !matches!(k.as_str(), "MODE" | "STATION" | "SCHED") {
+                vex += &v.to_string();
+            }
+        }
+
+        if let Some(sched) = self.get("SCHED") {
+            vex += &sched.to_string();
+        }
+
+        vex
     }
 }
 
@@ -131,9 +152,61 @@ impl Default for Vex {
     }
 }
 
+impl Display for Vex {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_vex())
+    }
+}
+
+impl FromStr for Vex {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Parser::new(s)?.parse_vex()
+    }
+}
+
+impl<I: AsRef<str>> Index<I> for Vex {
+    type Output = Block;
+
+    fn index(&self, index: I) -> &Self::Output {
+        self.get(index.as_ref())
+            .unwrap_or_else(|| panic!("Vex block '{}' does not exist", index.as_ref()))
+    }
+}
+
+impl<I: AsRef<str>> IndexMut<I> for Vex {
+    fn index_mut(&mut self, index: I) -> &mut Self::Output {
+        self.get_mut(index.as_ref())
+            .unwrap_or_else(|| panic!("Vex block '{}' does not exist", index.as_ref()))
+    }
+}
+
+impl<'a> IntoIterator for &'a Vex {
+    type Item = (&'a String, &'a Block);
+    type IntoIter = Iter<'a, String, Block>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut Vex {
+    type Item = (&'a String, &'a mut Block);
+    type IntoIter = IterMut<'a, String, Block>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter_mut()
+    }
+}
+
 /// The version of a Vex file. Typically parsed from a `VEX_rev` parameter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(feature = "serde", derive(serde::Serialize), derive(serde::Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize),
+    derive(serde::Deserialize)
+)]
 pub struct VexVersion {
     /// The major version
     pub maj: u8,
@@ -142,29 +215,32 @@ pub struct VexVersion {
 }
 
 impl VexVersion {
-    /// Create a new [`VexVersion`] from a major and minor version
+    /// Create a new vex version from a major and minor version
     pub fn new(maj: u8, min: u8) -> Self {
         Self { maj, min }
     }
 
-    /// Get a representation of this vex version as a Vex formatted string
-    pub fn to_vex(&self) -> String {
+    fn to_vex(self) -> String {
         format!("VEX_rev = {}.{};", self.maj, self.min)
-    }
-
-    /// Get a representation of this vex version as a Vex formatted string, with unneccesary whitespace removed
-    pub fn to_vex_minified(&self) -> String {
-        format!("VEX_rev={}.{};", self.maj, self.min)
-    }
-
-    /// Parse a vex version from a string slice
-    pub fn parse(vex: &str) -> Result<Self, ParseError> {
-        Parser::new(vex).parse_vex_version()
     }
 }
 
 impl Default for VexVersion {
     fn default() -> Self {
         Self { maj: 2, min: 0 }
+    }
+}
+
+impl Display for VexVersion {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.to_vex())
+    }
+}
+
+impl FromStr for VexVersion {
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Parser::new(s)?.parse_vex_version()
     }
 }

@@ -8,23 +8,15 @@ use std::ops::Range;
 use miette::{Diagnostic, LabeledSpan, SourceCode, SourceOffset, SourceSpan};
 use thiserror::Error;
 
+use crate::parsing::TokenKind;
+
 /// Indicates a range of failures when interacting with Vex files
-///
-/// This is the primary error type of `vexio` and includes [`ParseError`].
 ///
 /// If the crate feature `miette` is enabled, VexError implements [`miette::Diagnostic`] and can be used to print
 /// detailed error messages to the terminal for user facing applications
 #[allow(missing_docs)]
 #[derive(Debug, Error)]
 pub enum VexError {
-    #[error("Failed to parse VEX_rev, are you sure this is a Vex file?")]
-    MissingVexRev,
-    #[error("Could not find a valid {} block", .0)]
-    MissingBlock(String),
-    #[error("Found duplicate definitions of {}", .0)]
-    DuplicateDef(String),
-    #[error("Found duplicate block definitions of {}", .0)]
-    DuplicateBlock(String),
     #[error(transparent)]
     ParseError(#[from] ParseError),
     #[error(transparent)]
@@ -35,10 +27,10 @@ pub enum VexError {
 impl Diagnostic for VexError {
     fn code<'a>(&'a self) -> Option<Box<dyn std::fmt::Display + 'a>> {
         match self {
-            Self::MissingVexRev => Some(Box::new("vexio::missing_vex_rev")),
-            Self::DuplicateDef(_) => Some(Box::new("vexio::duplicate_def")),
-            Self::DuplicateBlock(_) => Some(Box::new("vexio::duplicate_block")),
-            Self::MissingBlock(_) => Some(Box::new("vexio::missing_block")),
+            // Self::MissingVexRev => Some(Box::new("vexio::missing_vex_rev")),
+            // Self::DuplicateDef(_) => Some(Box::new("vexio::duplicate_def")),
+            // Self::DuplicateBlock(_) => Some(Box::new("vexio::duplicate_block")),
+            // Self::MissingBlock(_) => Some(Box::new("vexio::missing_block")),
             Self::IoError(_) => Some(Box::new("std::io::Error")),
             Self::ParseError(e) => e.code(),
         }
@@ -59,18 +51,57 @@ impl Diagnostic for VexError {
     }
 }
 
-/// Indicates a failure to parse some Vex data structure from
-/// a string of characters
+/// Describes the type of [`ParseError`].
+#[derive(Debug, Error, Clone)]
+pub enum ParseErrorKind {
+    /// The required `GLOBAL` block is absent or invalid.
+    #[error("Missing GLOBAL block definition")]
+    MissingGlobal,
+    /// An entry does not contain the expected value structure.
+    #[error("Invalid entry")]
+    InvalidEntry,
+    /// The `VEX_rev` declaration is absent or invalid.
+    #[error("Missing or invalid VEX_rev definition")]
+    InvalidVexRev,
+    /// A token other than the expected token was encountered.
+    #[error("Unexpected token, expecting {} but found {}", .expecting, .found)]
+    UnexpectedToken {
+        /// The token expected by the parser.
+        expecting: TokenKind,
+        /// The token encountered by the parser.
+        found: TokenKind,
+    },
+    /// A token was encountered where no token was expected.
+    #[error("Unexpected token found: {}", .found)]
+    UnexpectedTokenFound {
+        /// The unexpected token.
+        found: TokenKind,
+    },
+    /// An invalid character was encountered.
+    #[error("Unexpected character: {}", .0)]
+    UnexpectedCharacter(char),
+    /// A string literal was not terminated.
+    #[error("Unterminated string literal")]
+    UnterminatedLiteral,
+    /// A numeric value could not be parsed.
+    #[error("Malformed number")]
+    MalformedNumber,
+    /// The input ended before parsing was complete.
+    #[error("Unexpected EOF")]
+    UnexpectedEof,
+}
+
+/// Indicates a failure to parse a Vex data structure from some input
 ///
-/// Contains detailed information on the location of the syntax error, and provides a description
+/// Contains detailed information on the location of the error, and provides a description
 /// of the cause of the error
 ///
 /// If the crate feature `miette` is enabled, ParseError implements [`miette::Diagnostic`] and can be used to print
 /// detailed error messages to the terminal for user facing applications
-#[derive(Debug, Error)]
-#[error("Failed to parse Vex at line {line}, column {col}: {desc}")]
+#[derive(Debug, Clone, Error)]
+#[error("Failed to parse Vex at line {line}, column {col}: {}", .kind.to_string())]
 pub struct ParseError {
-    desc: String,
+    kind: ParseErrorKind,
     src: String,
     start: usize,
     end: usize,
@@ -79,12 +110,12 @@ pub struct ParseError {
 }
 
 impl ParseError {
-    /// Make a new error with a textual description of the error `desc`, the source of the error `source`, and the _byte_ start and end locations
-    pub fn new(desc: impl AsRef<str>, source: impl AsRef<str>, start: usize, end: usize) -> Self {
-        let (line, col) = count_lines_cols(&source, start);
+    /// Make a new error with a textual description of the error `desc`, the source of the error `src`, and the _byte_ start and end locations
+    pub fn new(kind: ParseErrorKind, src: impl AsRef<str>, start: usize, end: usize) -> Self {
+        let (line, col) = count_lines_cols(&src, start);
         Self {
-            desc: desc.as_ref().to_string(),
-            src: source.as_ref().to_string(),
+            kind,
+            src: src.as_ref().to_string(),
             start,
             end,
             line,
@@ -92,19 +123,14 @@ impl ParseError {
         }
     }
 
-    /// Make a new error with a textual description of the error `desc`, the source of the error `source`, and the _byte_ location
-    pub fn new_at(desc: impl AsRef<str>, source: impl AsRef<str>, loc: usize) -> Self {
-        Self::new(desc, source, loc, loc)
+    /// The source text that generated the error
+    pub fn source(&self) -> &str {
+        &self.src
     }
 
-    /// Make a new error with a textual description of the error `desc`, the source of the error `source`, and the _byte_ start and end locations as a [`Range`]
-    pub fn new_range(desc: impl AsRef<str>, source: impl AsRef<str>, at: Range<usize>) -> Self {
-        Self::new(desc, source, at.start, at.end)
-    }
-
-    /// The error description
-    pub fn description(&self) -> &str {
-        &self.desc
+    /// The [`ParseErrorKind`] of this error
+    pub fn kind(&self) -> &ParseErrorKind {
+        &self.kind
     }
 
     /// The byte start location of the error
@@ -141,7 +167,11 @@ impl Diagnostic for ParseError {
 
     fn labels(&self) -> Option<Box<dyn Iterator<Item = miette::LabeledSpan> + '_>> {
         let span = SourceSpan::new(SourceOffset::from(self.start), self.end - self.start);
-        let label = LabeledSpan::new(Some("here".to_string()), span.offset(), self.end - self.start);
+        let label = LabeledSpan::new(
+            Some("here".to_string()),
+            span.offset(),
+            self.end - self.start,
+        );
         Some(Box::new(std::iter::once(label)))
     }
 

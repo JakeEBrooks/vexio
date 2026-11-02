@@ -1,4 +1,0 @@
-/target
-Cargo.lock
-vexio/__pycache__
-vexio/*.so

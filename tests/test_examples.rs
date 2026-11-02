@@ -1,5 +1,4 @@
-use vexio::Vex;
-use vexio::error::VexError;
+use vexio::{Vex, VexError};
 
 #[test]
 fn test_vex_parse_files() -> Result<(), VexError> {
@@ -11,16 +10,28 @@ fn test_vex_parse_files() -> Result<(), VexError> {
 }
 
 #[test]
-fn test_minified_vex() -> Result<(), VexError> {
+fn test_to_vex_and_back() -> Result<(), VexError> {
     let testfiles = std::fs::read_dir("tests/examples").unwrap();
     for f in testfiles {
         let vex = Vex::open(f.unwrap().path())?;
-        let vex_str = vex.to_vex();
-        let vex_min_str = vex.to_vex_minified();
-
-        let vex_str_parsed = Vex::parse(&vex_str)?;
-        let vex_min_str_parsed = Vex::parse(&vex_min_str)?;
-        assert_eq!(vex_str_parsed, vex_min_str_parsed)
+        let ser = vex.to_string();
+        let _revex: Vex = ser.parse()?;
     }
     Ok(())
 }
+
+//
+// #[test]
+// fn test_minified_vex() -> Result<(), VexError> {
+//     let testfiles = std::fs::read_dir("tests/examples").unwrap();
+//     for f in testfiles {
+//         let vex = Vex::open(f.unwrap().path())?;
+//         let vex_str = vex.to_vex();
+//         let vex_min_str = vex.to_vex_minified();
+//
+//         let vex_str_parsed = Vex::parse(&vex_str)?;
+//         let vex_min_str_parsed = Vex::parse(&vex_min_str)?;
+//         assert_eq!(vex_str_parsed, vex_min_str_parsed)
+//     }
+//     Ok(())
+// }
