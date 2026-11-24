@@ -33,7 +33,7 @@ pub enum BlockKind {
 /// declaration. If the definitions inside contain `ref $[BLOCKNAME] = ...` statements
 /// then it is of kind [`BlockKind::HighLevel`]. If it contains `scan [SCAN];` definitions
 /// then it is of kind [`BlockKind::Schedule`]. Otherwise it contains standard `def [DEFNAME];`
-/// definitions and it is ok kind [`BlockKind::Primitive`].
+/// definitions and it is of kind [`BlockKind::Primitive`].
 #[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "serde",
@@ -132,6 +132,16 @@ impl Block {
     /// Returns whether this block contains a definition with the given name.
     pub fn contains_key(&self, key: impl AsRef<str>) -> bool {
         self.defs.contains_key(key.as_ref())
+    }
+
+    /// Return the number of definitions within this Block
+    pub fn len(&self) -> usize {
+        self.defs.len()
+    }
+
+    /// Returns `true` if the Block contains no definitions
+    pub fn is_empty(&self) -> bool {
+        self.defs.is_empty()
     }
 
     fn to_vex(&self) -> String {
@@ -346,6 +356,21 @@ impl BlockDef {
     pub fn iter_mut_flattened(&mut self) -> impl Iterator<Item = (&String, &mut Vec<VexValue>)> {
         self.iter_mut()
             .flat_map(|(k, v)| v.iter_mut().map(move |inner| (k, inner)))
+    }
+
+    /// Returns the number of _unique_ entries in this definition
+    ///
+    /// Note that this may not return the value you expect if there
+    /// are multiple definitions of the same value. For example, a scan
+    /// with a `start`, `mode`, and `source` entry, along with 12 `station` entries
+    /// would produce a `len` of `4`
+    pub fn len(&self) -> usize {
+        self.values.len()
+    }
+
+    /// Returns `true` if there are no entries in this definition
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty()
     }
 
     pub(crate) fn set_values(&mut self, entries: HashMap<String, Vec<Vec<VexValue>>>) {

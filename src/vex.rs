@@ -121,6 +121,16 @@ impl Vex {
         self.blocks.remove(name.as_ref())
     }
 
+    /// Returns the number of [`Block`]s in this Vex
+    pub fn len(&self) -> usize {
+        self.blocks.len()
+    }
+
+    /// Returns `true` if there are no [`Block`]s in this Vex
+    pub fn is_empty(&self) -> bool {
+        self.blocks.is_empty()
+    }
+
     fn to_vex(&self) -> String {
         let mut vex = format!("{}\n{}", self.version, self.global);
         // Print MODE and STATION first, then SCHED last

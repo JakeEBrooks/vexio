@@ -61,6 +61,16 @@ impl Global {
         self.refs.iter_mut()
     }
 
+    /// Returns the number of references in this GLOBAL
+    pub fn len(&self) -> usize {
+        self.refs.len()
+    }
+
+    /// Returns `true` if there are no references in this GLOBAL
+    pub fn is_empty(&self) -> bool {
+        self.refs.is_empty()
+    }
+
     fn to_vex(&self) -> String {
         format!(
             "$GLOBAL;{}\n",
