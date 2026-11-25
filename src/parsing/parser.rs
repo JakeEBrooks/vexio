@@ -42,7 +42,7 @@ impl<'de> Parser<'de> {
         let (lhs, rhs) = version
             .source
             .split_once('.')
-            .ok_or(self.error(ParseErrorKind::InvalidVexRev))?;
+            .ok_or_else(|| self.error(ParseErrorKind::InvalidVexRev))?;
         let maj: u8 = lhs
             .parse()
             .map_err(|_| self.error(ParseErrorKind::InvalidVexRev))?;
@@ -272,9 +272,15 @@ impl<'de> Parser<'de> {
     }
 
     pub fn new(input: &'de str) -> Result<Self, ParseError> {
+        let tokens = Lexer::new(input)
+            .lex()?
+            .into_iter()
+            .filter(|t| t.kind != TokenKind::Comment)
+            .collect();
+
         Ok(Self {
             whole: input,
-            tokens: Lexer::new(input).lex()?,
+            tokens,
             cursor: 0,
         })
     }
@@ -294,13 +300,16 @@ impl<'de> Parser<'de> {
     }
 
     fn error(&self, kind: ParseErrorKind) -> ParseError {
-        let offending = self.tokens.get(self.cursor).unwrap();
-        ParseError::new(
-            kind,
-            self.whole,
-            offending.loc,
-            offending.loc + offending.len(),
-        )
+        let (kind, start, end) = match self.tokens.get(self.cursor) {
+            Some(token) => (kind, token.loc, token.loc + token.len()),
+            None => (
+                ParseErrorKind::UnexpectedEof,
+                self.whole.len(),
+                self.whole.len(),
+            ),
+        };
+
+        ParseError::new(kind, self.whole, start, end)
     }
 
     fn skip_comments(&mut self) {
